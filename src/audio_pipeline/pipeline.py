@@ -8,7 +8,6 @@ from pathlib import Path
 class AudioToTextPipeline:
     def __init__(self, sample_rate=16000):
         self.sample_rate = sample_rate
-        self.downloads_dir = None  # 다운로드 경로는 나중에 설정됨
 
     def process(self, mp4_path: str, remove_wav: bool = True) -> str:
         # return txt_path
@@ -17,11 +16,13 @@ class AudioToTextPipeline:
 
         # 파일명 추출
         filename = Path(mp4_path).stem
-        txt_path = os.path.join(self.downloads_dir, f"{filename}.txt")
+        # mp4 파일이 있는 디렉토리에 txt 파일 저장
+        downloads_dir = os.path.dirname(mp4_path)
+        txt_path = os.path.join(downloads_dir, f"{filename}.txt")
 
         print(f"[INFO] 변환 시작: {mp4_path}")
         start_time = time.time()
-        wav_path = os.path.join(self.downloads_dir, f"{filename}.wav")
+        wav_path = os.path.join(downloads_dir, f"{filename}.wav")
         convert_mp4_to_wav(mp4_path, wav_path, self.sample_rate)
         print(f"[INFO] 텍스트 변환 시작: {wav_path}")
         transcribe_wav_to_text(wav_path, txt_path)

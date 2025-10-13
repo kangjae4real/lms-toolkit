@@ -63,7 +63,7 @@ class VideoPipeline:
 
         if video_url:
             print(f"[SUCCESS] 동영상 링크 추출됨: {video_url}, 제목: {title}")
-            filepath = download_video(video_url, save_dir=self.downloads_dir, filename=title)
+            filepath = download_video(video_url, filename=title)
             print(f"[SUCCESS] 동영상 다운로드 완료: {filepath}")
             return filepath
         else:

@@ -5,9 +5,12 @@ from playwright.sync_api import Page
 async def on_request(event, shared_state: dict):
     url = event["request"]["url"]
     print(f"[CDP] 요청 감지: {url}")
-    if "ssmovie.mp4" in url and shared_state["video_url"] is None:
-        print(f"[CDP] ssmovie.mp4 요청 감지: {url}")
-        shared_state["video_url"] = url
+    if shared_state["video_url"] is None and url.endswith(".mp4"):
+        if "commons.ssu.ac.kr" in url or "commonscdn.com" in url:
+            # intro.mp4 같은 플레이어 UI 파일 제외
+            if "intro.mp4" not in url and "media_files" in url:
+                print(f"[CDP] 동영상 파일 감지: {url}")
+                shared_state["video_url"] = url
 
 
 async def register_cdp_video_sniffer(page: Page, shared_state: dict):
