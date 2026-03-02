@@ -3,7 +3,6 @@
 """
 
 from dataclasses import dataclass
-from typing import Optional
 
 
 @dataclass
@@ -13,7 +12,7 @@ class InputFieldConfig:
     placeholder: str
     is_password: bool = False
     is_multiline: bool = False
-    max_height: Optional[int] = None
+    max_height: int | None = None
 
 
 @dataclass

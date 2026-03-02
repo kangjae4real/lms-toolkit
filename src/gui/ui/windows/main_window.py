@@ -2,7 +2,6 @@
 메인 윈도우 클래스
 """
 
-from typing import Dict, List
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QMessageBox,
     QFileDialog, QPushButton
@@ -27,7 +26,7 @@ from src.gui.workers.processing_worker import ProcessingWorker
 class MainWindow(QWidget):
     """메인 윈도우 클래스"""
 
-    def __init__(self, modules: Dict, module_errors: List[str]):
+    def __init__(self, modules: dict, module_errors: list[str]):
         super().__init__()
 
         # 데이터 저장
@@ -202,14 +201,14 @@ class MainWindow(QWidget):
                 field.clear()
             self.log_area.clear()
 
-    def _collect_input_values(self) -> Dict[str, str]:
+    def _collect_input_values(self) -> dict[str, str]:
         """모든 입력 필드의 값 수집"""
         return {
             field_name: field.get_value()
             for field_name, field in self.input_fields.items()
         }
 
-    def _validate_inputs(self, inputs: Dict[str, str]) -> bool:
+    def _validate_inputs(self, inputs: dict[str, str]) -> bool:
         """입력값 유효성 검사"""
         valid, error_message = InputValidator.validate_all_inputs(inputs)
 
@@ -233,7 +232,7 @@ class MainWindow(QWidget):
 
         return True
 
-    def _start_background_processing(self, inputs: Dict[str, str]):
+    def _start_background_processing(self, inputs: dict[str, str]):
         """백그라운드 처리 시작"""
         # UI 상태 변경
         self.start_button.start_processing()

@@ -5,7 +5,6 @@
 import sys
 import os
 import json
-from typing import Dict, List
 from pathlib import Path
 from datetime import datetime
 
@@ -36,7 +35,7 @@ def get_settings_path() -> str:
     return os.path.join(get_app_data_dir(), "settings.json")
 
 
-def load_settings() -> Dict:
+def load_settings() -> dict:
     """설정 파일 로드"""
     settings_path = get_settings_path()
     if os.path.exists(settings_path):
@@ -48,7 +47,7 @@ def load_settings() -> Dict:
     return {"downloads_dir": get_default_downloads_dir()}
 
 
-def save_settings(settings: Dict) -> None:
+def save_settings(settings: dict) -> None:
     """설정 파일 저장"""
     settings_path = get_settings_path()
     with open(settings_path, 'w', encoding='utf-8') as f:
@@ -70,7 +69,7 @@ def get_resource_path(relative_path: str) -> str:
     return os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), relative_path)
 
 
-def create_env_file(user_inputs: Dict[str, str]) -> None:
+def create_env_file(user_inputs: dict[str, str]) -> None:
     """환경변수 파일 생성"""
     env_content = f"""USERID={user_inputs.get('student_id', '')}
 PASSWORD={user_inputs.get('password', '')}
@@ -80,14 +79,14 @@ GOOGLE_API_KEY={user_inputs.get('api_key', '')}
         f.write(env_content)
 
 
-def create_user_settings_file(urls: List[str]) -> None:
+def create_user_settings_file(urls: list[str]) -> None:
     """사용자 설정 파일 생성"""
     settings = {"video": urls}
     with open(get_resource_path('user_settings.json'), 'w', encoding='utf-8') as f:
         json.dump(settings, f, indent=2, ensure_ascii=False)
 
 
-def create_config_files(user_inputs: Dict[str, str]) -> None:
+def create_config_files(user_inputs: dict[str, str]) -> None:
     """모든 설정 파일들 생성"""
     create_env_file(user_inputs)
 
@@ -113,7 +112,7 @@ def set_downloads_directory(path: str) -> None:
     save_settings(settings)
 
 
-def extract_urls_from_input(url_input: str) -> List[str]:
+def extract_urls_from_input(url_input: str) -> list[str]:
     """입력 텍스트에서 URL 목록 추출"""
     if not url_input.strip():
         return []

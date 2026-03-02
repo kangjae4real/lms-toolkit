@@ -1,6 +1,5 @@
 import asyncio
 from playwright.async_api import async_playwright, Playwright, Page, BrowserContext
-from typing import Optional, Tuple
 
 from src.video_pipeline.login import perform_login_if_needed
 from src.video_pipeline.video_parser import extract_video_url
@@ -15,7 +14,7 @@ class VideoPipeline:
         self.password = user_setting.password
         self.downloads_dir = None  # 다운로드 경로는 나중에 설정됨
 
-    async def _setup_browser(self, playwright: Playwright) -> Tuple[Page, any, BrowserContext]:
+    async def _setup_browser(self, playwright: Playwright) -> tuple[Page, any, BrowserContext]:
         """브라우저 설정 및 페이지 생성"""
         browser = await playwright.chromium.launch(
             headless=False,
@@ -46,7 +45,7 @@ class VideoPipeline:
 
         return page, browser, context
 
-    async def _process_single_url(self, page: Page, url: str) -> Optional[str]:
+    async def _process_single_url(self, page: Page, url: str) -> str | None:
         """단일 URL에 대한 비디오 처리"""
         print(f"\n[INFO] 처리 중: {url}")
         await page.goto(url, wait_until="networkidle")

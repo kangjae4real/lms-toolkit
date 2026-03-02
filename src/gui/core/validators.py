@@ -3,7 +3,6 @@
 """
 
 import re
-from typing import Dict, List, Tuple
 from urllib.parse import urlparse
 
 from src.gui.config.constants import Messages
@@ -13,7 +12,7 @@ class InputValidator:
     """입력값 검증을 담당하는 클래스"""
 
     @staticmethod
-    def validate_student_id(student_id: str) -> Tuple[bool, str]:
+    def validate_student_id(student_id: str) -> tuple[bool, str]:
         """학번 유효성 검사"""
         if not student_id.strip():
             return False, Messages.STUDENT_ID_REQUIRED
@@ -25,7 +24,7 @@ class InputValidator:
         return True, ""
 
     @staticmethod
-    def validate_password(password: str) -> Tuple[bool, str]:
+    def validate_password(password: str) -> tuple[bool, str]:
         """비밀번호 유효성 검사"""
         if not password.strip():
             return False, Messages.PASSWORD_REQUIRED
@@ -36,7 +35,7 @@ class InputValidator:
         return True, ""
 
     @staticmethod
-    def validate_api_key(api_key: str) -> Tuple[bool, str]:
+    def validate_api_key(api_key: str) -> tuple[bool, str]:
         """API 키 유효성 검사"""
         if not api_key.strip():
             return False, Messages.API_KEY_REQUIRED
@@ -48,7 +47,7 @@ class InputValidator:
         return True, ""
 
     @staticmethod
-    def validate_urls(urls_text: str) -> Tuple[bool, str, List[str]]:
+    def validate_urls(urls_text: str) -> tuple[bool, str, list[str]]:
         """URL 목록 유효성 검사"""
         if not urls_text.strip():
             return False, Messages.URLS_REQUIRED, []
@@ -85,7 +84,7 @@ class InputValidator:
             return False
 
     @staticmethod
-    def validate_all_inputs(inputs: Dict[str, str]) -> Tuple[bool, str]:
+    def validate_all_inputs(inputs: dict[str, str]) -> tuple[bool, str]:
         """모든 입력값 종합 검증"""
         # 학번 검증
         valid, error = InputValidator.validate_student_id(inputs.get('student_id', ''))

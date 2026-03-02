@@ -1,13 +1,11 @@
 import json
 import os
 from pathlib import Path
-from typing import Optional
-
 from dotenv import load_dotenv
 
 
 class UserSetting:
-    def __init__(self, gui_inputs: Optional[dict] = None):
+    def __init__(self, gui_inputs: dict | None = None):
         self.gui_inputs = gui_inputs or {}
         
         # .env 파일이 있으면 로드, 없으면 GUI 입력값 사용

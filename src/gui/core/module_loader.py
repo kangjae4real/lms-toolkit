@@ -4,12 +4,12 @@
 
 import sys
 import os
-from typing import Dict, List, Tuple, Optional, Any
+from typing import Any
 
 from src.gui.config.settings import MODULE_CONFIGS
 
 
-def setup_python_path() -> Tuple[str, str]:
+def setup_python_path() -> tuple[str, str]:
     """Python 경로 설정"""
     if getattr(sys, 'frozen', False):
         # PyInstaller로 번들된 환경
@@ -32,7 +32,7 @@ def setup_python_path() -> Tuple[str, str]:
     return application_path, src_path
 
 
-def load_required_modules() -> Tuple[Dict[str, Optional[Any]], List[str]]:
+def load_required_modules() -> tuple[dict[str, Any | None], list[str]]:
     """필수 모듈들을 로드하고 결과 반환"""
     modules = {}
     errors = []
@@ -57,7 +57,7 @@ def load_required_modules() -> Tuple[Dict[str, Optional[Any]], List[str]]:
     return modules, errors
 
 
-def check_required_modules(modules: Dict[str, Optional[Any]]) -> Tuple[bool, List[str]]:
+def check_required_modules(modules: dict[str, Any | None]) -> tuple[bool, list[str]]:
     """필수 모듈들이 모두 로드되었는지 확인"""
     missing_modules = [name for name, module in modules.items() if module is None]
     return len(missing_modules) == 0, missing_modules

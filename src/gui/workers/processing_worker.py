@@ -4,7 +4,6 @@
 
 import traceback
 from pathlib import Path
-from typing import Dict, List
 from PySide6.QtCore import QThread, Signal
 
 from src.gui.config.constants import Messages
@@ -19,7 +18,7 @@ class ProcessingWorker(QThread):
     log_message = Signal(str)
     processing_finished = Signal(bool, str)
 
-    def __init__(self, user_inputs: Dict[str, str], modules: Dict):
+    def __init__(self, user_inputs: dict[str, str], modules: dict):
         super().__init__()
         self.user_inputs = user_inputs
         self.modules = modules
@@ -93,7 +92,7 @@ class ProcessingWorker(QThread):
         # 결과 정리
         self._display_results(video_paths, text_paths)
 
-    def _download_videos(self, urls: List[str], user_setting) -> List[str]:
+    def _download_videos(self, urls: list[str], user_setting) -> list[str]:
         """비디오 다운로드"""
         self._emit_log(f"{Messages.VIDEO_DOWNLOADING}")
         self._emit_log(f"📋 다운로드할 링크: {len(urls)}개")
@@ -113,7 +112,7 @@ class ProcessingWorker(QThread):
 
         return video_paths
 
-    def _convert_audio_to_text(self, video_paths: List[str]) -> List[str]:
+    def _convert_audio_to_text(self, video_paths: list[str]) -> list[str]:
         """오디오를 텍스트로 변환"""
         self._emit_log(Messages.AUDIO_CONVERTING)
 
@@ -145,7 +144,7 @@ class ProcessingWorker(QThread):
 
         return text_paths
 
-    def _summarize_texts(self, text_paths: List[str]) -> List[str]:
+    def _summarize_texts(self, text_paths: list[str]) -> list[str]:
         """텍스트 요약"""
         self._emit_log(Messages.TEXT_SUMMARIZING)
 
@@ -198,7 +197,7 @@ class ProcessingWorker(QThread):
         self._emit_log("❌ ffmpeg를 찾을 수 없습니다. 설치가 필요합니다.")
         raise RuntimeError("ffmpeg가 설치되어 있지 않습니다.")
 
-    def _display_results(self, video_paths: List[str], text_paths: List[str]):
+    def _display_results(self, video_paths: list[str], text_paths: list[str]):
         """결과 요약 표시"""
         self._emit_log("\n" + "="*50)
 
