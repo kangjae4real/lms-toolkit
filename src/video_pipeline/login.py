@@ -1,4 +1,4 @@
-from playwright.sync_api import Page
+from playwright.async_api import Page
 
 
 async def perform_login_if_needed(page: Page, username: str, password: str) -> bool:

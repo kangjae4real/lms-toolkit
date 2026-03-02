@@ -1,25 +1,16 @@
 import asyncio
-from playwright.sync_api import Page
+from playwright.async_api import Page, Request
 
 
-async def on_request(event, shared_state: dict):
-    url = event["request"]["url"]
-    print(f"[CDP] 요청 감지: {url}")
-    if shared_state["video_url"] is None and url.endswith(".mp4"):
-        if "commons.ssu.ac.kr" in url or "commonscdn.com" in url:
-            # intro.mp4 같은 플레이어 UI 파일 제외
-            if "intro.mp4" not in url and "media_files" in url:
-                print(f"[CDP] 동영상 파일 감지: {url}")
-                shared_state["video_url"] = url
-
-
-async def register_cdp_video_sniffer(page: Page, shared_state: dict):
-    """CDP 세션을 생성하고 네트워크 요청을 감시. CDP 클라이언트를 반환하여 나중에 정리할 수 있도록 함."""
-    client = await page.context.new_cdp_session(page)
-    await client.send("Network.enable")
-    client.on("Network.requestWillBeSent",
-              lambda e: asyncio.create_task(on_request(e, shared_state)))
-    return client  # CDP 클라이언트 반환
+def _is_target_video_url(url: str) -> bool:
+    """동영상 URL인지 판별"""
+    if not url.endswith(".mp4"):
+        return False
+    if "commons.ssu.ac.kr" not in url and "commonscdn.com" not in url:
+        return False
+    if "intro.mp4" in url or "media_files" not in url:
+        return False
+    return True
 
 
 async def find_canvas_video_frame(page: Page, shared_state: dict):
@@ -64,7 +55,14 @@ async def trigger_video_play(frame):
 
 async def extract_video_url(page: Page) -> tuple[str, str]:
     shared_state = {"video_url": None, "title": None}
-    cdp_client = await register_cdp_video_sniffer(page, shared_state)
+
+    def on_request(request: Request):
+        url = request.url
+        if shared_state["video_url"] is None and _is_target_video_url(url):
+            print(f"[Request] 동영상 파일 감지: {url}")
+            shared_state["video_url"] = url
+
+    page.on("request", on_request)
 
     try:
         video_frame = await find_canvas_video_frame(page, shared_state)
@@ -83,10 +81,5 @@ async def extract_video_url(page: Page) -> tuple[str, str]:
         print("[DEBUG] 비디오 URL을 찾지 못했습니다.")
         return None, None
     finally:
-        # CDP 세션 정리 - 네트워크 모니터링 비활성화
-        try:
-            await cdp_client.send("Network.disable")
-            await cdp_client.detach()
-            print("[DEBUG] CDP 세션 정리 완료")
-        except Exception as e:
-            print(f"[WARN] CDP 세션 정리 중 오류 (무시): {e}")
+        page.remove_listener("request", on_request)
+        print("[DEBUG] 요청 리스너 해제 완료")
