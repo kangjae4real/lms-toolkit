@@ -3,19 +3,8 @@
 from __future__ import annotations
 
 import re
-import select
-import sys
+from collections import OrderedDict
 from datetime import datetime
-
-
-def _input_with_timeout(prompt: str, timeout: int = 10) -> str | None:
-    """timeout초 안에 입력이 없으면 None 반환 (Unix 전용)."""
-    print(prompt, end="", flush=True)
-    ready, _, _ = select.select([sys.stdin], [], [], timeout)
-    if ready:
-        return sys.stdin.readline().strip()
-    print()
-    return None
 
 
 def _format_duration(total_sec: int) -> str:
@@ -27,96 +16,136 @@ def _format_duration(total_sec: int) -> str:
     return f"{total_m}:{total_s:02d}"
 
 
-def select_lectures(all_lectures: list[dict]) -> list[dict]:
-    """강의 목록 표시 (과목별 그룹, 상태 표시) + 사용자 선택 → 선택된 강의 리스트 반환"""
-    if not all_lectures:
-        return []
+def _group_by_course(lectures: list[dict]) -> OrderedDict:
+    """강의를 과목별로 그룹핑 (입력 순서 유지)"""
+    groups = OrderedDict()  # type: OrderedDict[str, list[dict]]
+    for lec in lectures:
+        cn = lec.get("courseName", "unknown")
+        if cn not in groups:
+            groups[cn] = []
+        groups[cn].append(lec)
+    return groups
 
+
+def _display_lectures(all_lectures: list[dict], expanded: bool) -> list[dict]:
+    """강의 목록 표시. 번호가 매겨진 강의 리스트(visible)를 반환."""
     unwatched = [l for l in all_lectures if not l.get("isCompleted")]
     completed = [l for l in all_lectures if l.get("isCompleted")]
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
     print("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
     print(f"  전체 강의 {len(all_lectures)}개 (미수강 {len(unwatched)} / 수강완료 {len(completed)}):")
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
+    groups = _group_by_course(all_lectures)
+    visible = []  # 번호가 매겨진 강의 (선택 가능)
     total_sec = 0
     unwatched_sec = 0
-    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-
-    # 과목별 그룹핑 (순서 유지)
-    from collections import OrderedDict
-    groups = OrderedDict()  # type: OrderedDict[str, list[tuple[int, dict]]]
-    for i, lec in enumerate(all_lectures, 1):
-        cn = lec.get("courseName", "unknown")
-        if cn not in groups:
-            groups[cn] = []
-        groups[cn].append((i, lec))
 
     for course_name, items in groups.items():
-        course_unwatched = sum(1 for _, l in items if not l.get("isCompleted"))
-        course_total = len(items)
-        if course_unwatched > 0:
-            header = f"{course_name} (미수강 {course_unwatched} / 전체 {course_total})"
+        course_unwatched = [l for l in items if not l.get("isCompleted")]
+        course_completed = [l for l in items if l.get("isCompleted")]
+
+        # 과목 헤더
+        if expanded:
+            if course_unwatched:
+                header = f"{course_name} (미수강 {len(course_unwatched)} / 전체 {len(items)})"
+            else:
+                header = f"{course_name} (전체 {len(items)})"
         else:
-            header = f"{course_name} (수강 완료)"
+            if course_unwatched:
+                header = f"{course_name} (미수강 {len(course_unwatched)})"
+            else:
+                header = course_name
         print(f"\n  ── {header} ──")
 
-        for idx, lec in items:
+        for lec in items:
+            is_done = lec.get("isCompleted", False)
             m, s = divmod(lec["durationSec"], 60)
             total_sec += lec["durationSec"]
-            if not lec.get("isCompleted"):
+            if not is_done:
                 unwatched_sec += lec["durationSec"]
 
-            status = "V" if lec.get("isCompleted") else " "
+            if is_done and not expanded:
+                continue  # 접힌 상태: 수강완료 개별 표시 안 함
 
-            # D-day: 수강완료는 표시 안 함
+            visible.append(lec)
+            idx = len(visible)
+            status = "V" if is_done else " "
+
             d_day = ""
-            if not lec.get("isCompleted") and lec.get("deadline"):
-                deadline_dt = datetime.fromisoformat(lec["deadline"].replace("Z", "+00:00")).replace(tzinfo=None)
+            if not is_done and lec.get("deadline"):
+                deadline_dt = datetime.fromisoformat(
+                    lec["deadline"].replace("Z", "+00:00")
+                ).replace(tzinfo=None)
                 days_left = (deadline_dt - today).days
                 d_day = f" D-{days_left}" if days_left >= 0 else f" D+{abs(days_left)}"
 
-            print(f"  [{idx:2d}] {status}  {lec['courseName']} — {lec['title']} ({m}:{s:02d}){d_day}")
+            print(f"  [{idx:2d}] {status}  {lec['title']} ({m}:{s:02d}){d_day}")
 
-    print(f"\n  총 재생시간: {_format_duration(total_sec)} (미수강: {_format_duration(unwatched_sec)})")
+        # 접힌 상태: 수강완료 요약
+        if not expanded and course_completed:
+            print(f"  [ +{len(course_completed)} 수강완료 ]")
+
+    # 재생시간
+    if expanded:
+        print(f"\n  총 재생시간: {_format_duration(total_sec)} (미수강: {_format_duration(unwatched_sec)})")
+    else:
+        print(f"\n  총 재생시간: {_format_duration(unwatched_sec)} (미수강)")
+
+    # 미수강 0개 안내
+    if not unwatched:
+        print("\n  미수강 강의가 없습니다. 수강완료 강의를 다운로드하려면 'e'를 입력하세요.")
+
     print()
+    return visible
 
-    first = True
+
+def select_lectures(all_lectures: list[dict]) -> list[dict]:
+    """강의 목록 표시 (접기/펼치기) + 사용자 선택 → 선택된 강의 리스트 반환"""
+    if not all_lectures:
+        return []
+
+    unwatched = [l for l in all_lectures if not l.get("isCompleted")]
+    expanded = False
+    visible = _display_lectures(all_lectures, expanded=False)
+
     while True:
         try:
-            if first:
-                choice = _input_with_timeout(
-                    "번호 (예: 1,2,3 / all / q) [10초 후 자동 all]: "
-                )
-                first = False
-                if choice is None:
-                    print("  ⏱ 10초 타임아웃 → 전체 선택")
-                    return all_lectures
-                choice = choice.lower()
-            else:
-                choice = input("번호 (예: 1,2,3 / all / q): ").strip().lower()
+            prompt = "번호 / all / q / e(펼치기): " if not expanded else "번호 / all / q: "
+            choice = input(prompt).strip().lower()
         except EOFError:
             return []
 
         if choice == "q":
             return []
+
         if choice == "all":
-            return all_lectures
+            if unwatched:
+                return unwatched
+            print("  미수강 강의가 없습니다. 'e'로 수강완료 강의를 펼쳐보세요.")
+            continue
+
+        if choice == "e" and not expanded:
+            expanded = True
+            visible = _display_lectures(all_lectures, expanded=True)
+            continue
 
         # 번호 파싱
         try:
             indices = [int(x.strip()) for x in choice.split(",") if x.strip()]
             selected = []
             for idx in indices:
-                if 1 <= idx <= len(all_lectures):
-                    selected.append(all_lectures[idx - 1])
+                if 1 <= idx <= len(visible):
+                    selected.append(visible[idx - 1])
                 else:
-                    print(f"  [WARN] {idx}번은 범위 밖 (1~{len(all_lectures)})")
+                    print(f"  [WARN] {idx}번은 범위 밖 (1~{len(visible)})")
             if selected:
                 return selected
             print("  유효한 번호를 입력하세요.")
         except ValueError:
-            print("  숫자, all, q 중 하나를 입력하세요.")
+            valid_cmds = "숫자, all, q, e" if not expanded else "숫자, all, q"
+            print(f"  {valid_cmds} 중 하나를 입력하세요.")
 
 
 def _is_target_video_url(url: str) -> bool:
