@@ -1,151 +1,131 @@
-# LMS 요약
+# LMS 자동 수강 & 스크립트 추출
 
-## 환경설정
+숭실대학교 LMS(Canvas)의 미수강 동영상 강의를 자동으로 수강 처리하고, 강의 스크립트를 추출하는 CLI 도구입니다.
 
-### 파이썬 버전 설정
+## 주요 기능
 
-whisper를 사용하기 때문에 적정 버전인 3.9.9 사용(3.13은 openai-whisper 다운로드가 안될거임)
+- 마이페이지에서 **미수강 강의 자동 감지**
+- 1x 배속 재생으로 **출석 인정 처리**
+- 재생과 동시에 **MP4 다운로드 + 음성→텍스트 전사** (병렬 처리)
+- 강의 선택 재생 (번호 지정 / 전체 / 10초 타임아웃 시 자동 전체)
 
-직접 설치 또는 pyenv 사용하여 파이썬 버전 관리
+## 요구 사항
 
-### Mac OS pyenv 설정
+- Python 3.11 이상
+- ffmpeg
+- Google Chrome (Mac 기준 `/Applications/Google Chrome.app/`)
 
-pyenv 설치
+## 빠른 시작
 
-```
-brew install pyenv
-```
+### 1. 환경 설정
 
-.zshrc에 아래 내용 작성
+```bash
+git clone https://github.com/<your-repo>/lms-summarizer.git
+cd lms-summarizer
 
-```
-# [pyenv]
-export PYENV_ROOT="$HOME/.pyenv"
-export PATH="$PYENV_ROOT/bin:$PATH"
-eval "$(pyenv init --path)"
-```
-
-```
-source ~/.zshrc
-```
-
-3.9.9 버전 설치 및 사용
-
-```
-pyenv install 3.9.9
-
-pyenv local 3.9.9
-```
-
-현재 폴더에 .python-version 생기면 성공!
-
-### venv 설정
-
-```
 python3 -m venv .venv
-```
-
-1. Mac OS
-
-```
 source .venv/bin/activate
-```
 
-2. Windows
-
-```
-.venv/bin/Activate.ps1
-```
-
-### 라이브러리 설치
-
-아래 명령어를 실행해서 라이브러리 설치
-
-```
 pip3 install -r requirements.txt
+playwright install chromium
 ```
 
-라이브러리를 설치하면 매번 꼭 업데이트 해주자
+### 2. ffmpeg 설치
 
-```
-pip3 freeze >> requirements.txt
-```
-
-playwright 용 특별 설치
-
-```
-playwright install
-```
-
-### ffmpeg 설치
-
-동영상 파일을 wav로 바꾸어야하기 때문에 ffmpeg을 설치한다
-
-```
+```bash
 brew install ffmpeg
 ```
 
-### .env 설정
+### 3. .env 설정
+
+프로젝트 루트에 `.env` 파일 생성:
 
 ```
-USERID=(아이디)학번
-PASSWORD=비밀번호
+USERID=학번
+PASSWORD=LMS비밀번호
 ```
 
-### 리턴제로 API 키 설정
+### 4. 실행
 
-그냥 whisper 사용할거면 안해도 됨
-여기에서 API 키 발급 한달 600분 무료 https://developers.rtzr.ai/
-
-.env에 다음 항목을 추가
-
-```
-RETURNZERO_CLIENT_ID=~~~~~~~~
-RETURNZERO_CLIENT_SECRET=~~~~~~~~~
+```bash
+python -m src.auto_watch
 ```
 
-### openai API 키 설정
+## 사용 흐름
 
 ```
-OPENAI_API_KEY=~~~~~~~~
+실행 → LMS 로그인 → 미수강 강의 감지 → 목록 표시
+                                          ↓
+                                    번호 선택 (또는 all)
+                                          ↓
+                              강의 재생 (출석) + 다운로드 + 전사
+                                          ↓
+                                    output/에 결과 저장
 ```
 
-### 최종 .env 모습
+실행하면 미수강 강의 목록이 표시됩니다:
 
 ```
-USERID=(아이디)학번
-PASSWORD=비밀번호
-RETURNZERO_CLIENT_ID=~~~~~~~~
-RETURNZERO_CLIENT_SECRET=~~~~~~~~
-OPENAI_API_KEY=~~~~~~~~
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  미수강 강의 3개:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  [1] 데이터베이스 — 7주차 강의 (24:30) D-3
+  [2] 운영체제 — 중간고사 범위 정리 (15:22) D-5
+  [3] 컴퓨터네트워크 — TCP/IP (32:10) D-7
+
+  총 재생시간: 1:12:02
+
+재생할 번호 (예: 1,2 / all / q) [10초 후 자동 all]:
 ```
 
-### user_settings.json 설정
+## 출력 파일
 
-없어도 동작은 함
-
-```
-{
-  "video": [
-    "https://canvas.ssu.ac.kr/courses/35082/modules/items/3160477?return_url=/courses/35082/external_tools/71",
-    "https://canvas.ssu.ac.kr/courses/35082/modules/items/3160478?return_url=/courses/35082/external_tools/71",
-    "https://canvas.ssu.ac.kr/courses/35082/modules/items/3160479?return_url=/courses/35082/external_tools/71"
-  ]
-}
-```
-
-## 예시
+결과물은 `output/과목명/` 폴더에 저장됩니다:
 
 ```
-https://canvas.ssu.ac.kr/courses/35082/modules/items/3149344?return_url=/courses/35082/external_tools/71
+output/
+└── 데이터베이스/
+    ├── 7주차 강의.mp4    # 다운로드된 동영상
+    └── 7주차 강의.txt    # 전사된 스크립트
 ```
 
-## 에러 발생의 경우
+> 중간에 생성되는 WAV 파일은 전사 완료 후 자동 삭제됩니다.
 
-### 단위 테스트 파일 실행 실패 시 PYTHONPATH 설정
-
-예 ModuleNotFoundError: No module named 'audio_pipeline' 같은 에러 발생 시 파이썬 상대경로 문제(파이썬은 엄밀히 따지면 루트가 되는 프로젝트 시작점이 따로 없음 그래서 PYTHONPATH로 설정해야함)
+## 프로젝트 구조
 
 ```
-export PYTHONPATH="${PYTHONPATH}:/Users/lsm/dev/project/lms-summarizer/src"
+src/
+├── auto_watch.py              # 메인 (자동 수강 + 다운로드 + 전사)
+├── audio_pipeline/
+│   ├── converter.py           # MP4 → WAV (ffmpeg)
+│   └── transcriber.py         # WAV → TXT (faster-whisper)
+└── summarize_pipeline/        # AI 요약 (예정)
+    ├── pipeline.py
+    └── summarizer.py
+```
+
+## 사용 기술
+
+| 역할 | 기술 |
+|------|------|
+| LMS 자동화 | Playwright (Chromium) |
+| 음성 인식 | faster-whisper (turbo 모델, CPU int8) |
+| AI 요약 | Google Gemini API (예정) |
+
+## 트러블슈팅
+
+### Playwright 브라우저
+
+```bash
+playwright install chromium
+```
+
+### faster-whisper 모델
+
+첫 실행 시 turbo 모델(~1.5GB)을 HuggingFace에서 자동 다운로드합니다. 네트워크 연결을 확인하세요.
+
+### ModuleNotFoundError
+
+```bash
+export PYTHONPATH="${PYTHONPATH}:$(pwd)/src"
 ```
