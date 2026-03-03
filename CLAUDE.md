@@ -30,3 +30,12 @@ PASSWORD=(비밀번호)
 - `src/auto_watch/`의 사용자 대면 동작 변경 시 관련 문서도 함께 업데이트할 것
 - 사용자 대면 메시지 및 문서는 한국어
 - Mac 전용 (Windows 미지원)
+
+## Git 커밋
+
+- **코드 변경 후 항상 커밋한다.** 작업 단위(논리적으로 독립된 변경)마다 나눠서 커밋
+- Conventional Commits 형식: `<type>(<scope>): <한국어 설명>`
+  - type: `feat`, `fix`, `refactor`, `docs`, `test`, `chore`
+  - scope: 생략 가능. 마일스톤이 있으면 `feat(M2.5):` 형태로 표기
+- 커밋 메시지는 한국어, 첫 줄 72자 이내
+- 하나의 커밋에 하나의 관심사 (docs와 구현 코드를 섞지 않는다)
