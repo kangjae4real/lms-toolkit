@@ -1,4 +1,4 @@
-"""미수강 과목 및 강의 탐색"""
+"""과목 및 강의 탐색"""
 
 import asyncio
 
@@ -8,9 +8,9 @@ from .config import BASE_URL, MYPAGE_URL
 from .browser import login_if_needed, get_tool_content_frame
 
 
-async def get_unwatched_courses(page: Page) -> list[dict]:
-    """마이페이지에서 미수강 동영상이 있는 과목 목록 반환"""
-    print("\n[INFO] 마이페이지에서 미수강 과목 탐색 중...")
+async def get_courses(page: Page) -> list[dict]:
+    """마이페이지에서 모든 과목 목록 반환"""
+    print("\n[INFO] 마이페이지에서 과목 탐색 중...")
     await page.goto(MYPAGE_URL, wait_until="networkidle")
     await login_if_needed(page)
 
@@ -43,20 +43,23 @@ async def get_unwatched_courses(page: Page) -> list[dict]:
         }
     """)
 
-    unwatched = [c for c in courses if c["videoCount"] > 0]
+    if not courses:
+        print("[INFO] 수강 중인 과목이 없습니다")
+        return courses
 
-    if unwatched:
-        print(f"[INFO] 미수강 동영상이 있는 과목 {len(unwatched)}개:")
-        for c in unwatched:
-            print(f"  • {c['name']} — 동영상 {c['videoCount']}개")
-    else:
-        print("[INFO] 미수강 동영상 없음!")
+    unwatched_count = sum(1 for c in courses if c["videoCount"] > 0)
+    print(f"[INFO] 과목 {len(courses)}개 발견 (미수강 동영상 있는 과목: {unwatched_count}개):")
+    for c in courses:
+        if c["videoCount"] > 0:
+            print(f"  • {c['name']} — 미수강 {c['videoCount']}개")
+        else:
+            print(f"  • {c['name']} — 수강 완료")
 
-    return unwatched
+    return courses
 
 
-async def get_unwatched_lectures(page: Page, course_id: str, course_name: str = "") -> list[dict]:
-    """과목의 주차학습 페이지에서 미수강 강의 목록 반환"""
+async def get_lectures(page: Page, course_id: str, course_name: str = "") -> list[dict]:
+    """과목의 주차학습 페이지에서 강의 목록 반환 (미수강 + 수강완료)"""
     url = f"{BASE_URL}/courses/{course_id}/external_tools/71"
     print(f"\n[INFO] 주차학습 페이지 로드 중... (course {course_id})")
     await page.goto(url, wait_until="networkidle")
@@ -129,7 +132,7 @@ async def get_unwatched_lectures(page: Page, course_id: str, course_name: str = 
 
                 return { title, href, isCompleted, durationSec, startDate: startDate?.toISOString() || null, deadline: deadline?.toISOString() || null };
             }).filter(item => {
-                if (!item || !item.href || item.durationSec <= 0 || item.isCompleted) return false;
+                if (!item || !item.href || item.durationSec <= 0) return false;
                 // 시작일이 있으면 오늘 이후인 것은 제외
                 if (item.startDate) {
                     const today = new Date();
@@ -145,9 +148,12 @@ async def get_unwatched_lectures(page: Page, course_id: str, course_name: str = 
     for lec in lectures:
         lec["courseName"] = course_name
 
-    print(f"[INFO] 미수강 강의 {len(lectures)}개:")
+    unwatched = [l for l in lectures if not l["isCompleted"]]
+    completed = [l for l in lectures if l["isCompleted"]]
+    print(f"[INFO] 강의 {len(lectures)}개 (미수강 {len(unwatched)} / 수강완료 {len(completed)}):")
     for lec in lectures:
         m, s = divmod(lec["durationSec"], 60)
-        print(f"  • {lec['title']} ({m}:{s:02d})")
+        status = "V" if lec["isCompleted"] else " "
+        print(f"  {status} {lec['title']} ({m}:{s:02d})")
 
     return lectures

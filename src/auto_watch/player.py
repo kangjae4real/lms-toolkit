@@ -1,4 +1,4 @@
-"""강의 재생 및 수강 처리"""
+"""강의 재생(미수강) / 다운로드(수강완료) 처리"""
 
 from __future__ import annotations
 
@@ -20,45 +20,19 @@ def find_commons_frame(page: Page) -> Frame | None:
     return None
 
 
-async def watch_lecture(page: Page, lecture: dict) -> dict:
-    """강의 페이지 이동 → 재생 → 완료 대기 + 병렬 다운로드/전사
+async def _enter_lecture_page(page: Page, lecture: dict) -> Frame | None:
+    """강의 페이지 진입 → iframe 대기 → 이어보기 처리 → commons frame 반환.
+    실패 시 None 반환."""
+    await page.goto(lecture["href"], wait_until="networkidle")
 
-    Returns:
-        {"attended": bool, "mp4": str|None, "txt": str|None}
-    """
-    title = lecture["title"]
-    url = lecture["href"]
-    duration_sec = lecture["durationSec"]
-    course_name = lecture.get("courseName", "unknown")
-
-    m, s = divmod(duration_sec, 60)
-    print(f"\n{'─' * 50}")
-    print(f"[PLAY] {title} ({m}:{s:02d})")
-    print(f"{'─' * 50}")
-
-    # 비디오 URL 캡처 준비
-    captured_video_url = {"url": None}
-
-    def on_request(request: Request):
-        if captured_video_url["url"] is None and _is_target_video_url(request.url):
-            captured_video_url["url"] = request.url
-
-    page.on("request", on_request)
-
-    await page.goto(url, wait_until="networkidle")
-
-    # tool_content iframe 대기
     tool_frame = await get_tool_content_frame(page)
-
-    # commons iframe 대기
     await tool_frame.wait_for_selector(".xnlailvc-commons-frame", timeout=20000)
     await asyncio.sleep(3)
 
     commons = find_commons_frame(page)
     if not commons:
         print("[ERROR] commons.ssu.ac.kr iframe을 찾을 수 없음")
-        page.remove_listener("request", on_request)
-        return {"attended": False, "mp4": None, "txt": None}
+        return None
 
     # "이전에 시청했던 XX:XX부터 이어서 보시겠습니까?" 다이얼로그 처리
     try:
@@ -72,7 +46,19 @@ async def watch_lecture(page: Page, lecture: dict) -> dict:
     except Exception:
         pass  # 다이얼로그가 안 뜨면 정상 — 처음 보는 강의
 
-    # 재생 버튼 대기 및 클릭
+    return commons
+
+
+async def _click_play_and_capture_url(page: Page, commons: Frame) -> str | None:
+    """재생 버튼 클릭 + 비디오 URL 캡처. 실패 시 None."""
+    captured_video_url = {"url": None}
+
+    def on_request(request: Request):
+        if captured_video_url["url"] is None and _is_target_video_url(request.url):
+            captured_video_url["url"] = request.url
+
+    page.on("request", on_request)
+
     try:
         await commons.wait_for_selector(".vc-front-screen-play-btn", timeout=15000)
         await asyncio.sleep(1)
@@ -81,7 +67,7 @@ async def watch_lecture(page: Page, lecture: dict) -> dict:
     except Exception as e:
         print(f"[ERROR] 재생 버튼 클릭 실패: {e}")
         page.remove_listener("request", on_request)
-        return {"attended": False, "mp4": None, "txt": None}
+        return None
 
     await asyncio.sleep(3)
 
@@ -92,22 +78,14 @@ async def watch_lecture(page: Page, lecture: dict) -> dict:
         await asyncio.sleep(0.1)
 
     page.remove_listener("request", on_request)
+    return captured_video_url["url"]
 
-    # 비디오 URL이 잡혔으면 병렬 다운로드+전사 시작
-    transcript_task = None
-    if captured_video_url["url"]:
-        print(f"  ├ 영상 URL 캡처 완료")
-        transcript_task = asyncio.create_task(
-            download_and_transcribe(captured_video_url["url"], course_name, title)
-        )
-    else:
-        print(f"  ├ 영상 URL 미감지 — 스크립트 추출 건너뜀")
 
-    # 재생 진행 모니터링
+async def _monitor_playback(commons: Frame, title: str, duration_sec: int) -> bool:
+    """재생 진행 모니터링. 수강 완료 시 True 반환."""
     start_time = datetime.now()
     timeout_sec = duration_sec + 60  # 1분 여유
     last_log_time = 0
-    attended = False
 
     while True:
         elapsed = (datetime.now() - start_time).total_seconds()
@@ -150,8 +128,7 @@ async def watch_lecture(page: Page, lecture: dict) -> dict:
             if progress["ended"] or pct >= 99.5:
                 print(f"[DONE] {title} 수강 완료!")
                 await asyncio.sleep(3)  # 완료 이벤트가 서버에 전송될 시간
-                attended = True
-                break
+                return True
 
             # 일시정지 감지 → 자동 재개
             if progress["paused"] and progress["currentTime"] > 1:
@@ -171,15 +148,73 @@ async def watch_lecture(page: Page, lecture: dict) -> dict:
         # 타임아웃
         if elapsed > timeout_sec:
             print(f"[WARN] 타임아웃 ({elapsed:.0f}s). 다음 강의로 이동.")
-            break
+            return False
 
         await asyncio.sleep(5)
 
-    # 다운로드/전사 완료 대기
+
+async def process_lecture(page: Page, lecture: dict) -> dict:
+    """강의 처리: 미수강이면 재생+출석, 수강완료면 다운로드만.
+
+    Returns:
+        {"attended": bool, "download_only": bool, "mp4": str|None, "txt": str|None}
+    """
+    title = lecture["title"]
+    duration_sec = lecture["durationSec"]
+    course_name = lecture.get("courseName", "unknown")
+    is_completed = lecture.get("isCompleted", False)
+
+    m, s = divmod(duration_sec, 60)
+    print(f"\n{'─' * 50}")
+    if is_completed:
+        print(f"[DL] {title} (수강완료 — 다운로드만)")
+    else:
+        print(f"[PLAY] {title} ({m}:{s:02d})")
+    print(f"{'─' * 50}")
+
+    # 공통: 페이지 진입 + iframe 준비
+    commons = await _enter_lecture_page(page, lecture)
+    if not commons:
+        return {"attended": False, "download_only": False, "mp4": None, "txt": None}
+
+    # 공통: 재생 버튼 클릭 + URL 캡처
+    video_url = await _click_play_and_capture_url(page, commons)
+
+    # 수강완료 강의: 즉시 비디오 정지
+    if is_completed and video_url:
+        try:
+            await commons.evaluate("""
+                () => {
+                    const videos = document.querySelectorAll('video');
+                    for (const v of videos) {
+                        if (v.duration > 10) v.pause();
+                    }
+                }
+            """)
+            print("[INFO] 비디오 정지 (수강완료 — URL 캡처 완료)")
+        except Exception:
+            pass
+
+    # 공통: 다운로드+전사 시작
+    transcript_task = None
+    if video_url:
+        print(f"  ├ 영상 URL 캡처 완료")
+        transcript_task = asyncio.create_task(
+            download_and_transcribe(video_url, course_name, title)
+        )
+    else:
+        print(f"  ├ 영상 URL 미감지 — 스크립트 추출 건너뜀")
+
+    # 미수강: 재생 진행 모니터링
+    attended = False
+    if not is_completed:
+        attended = await _monitor_playback(commons, title, duration_sec)
+
+    # 공통: 다운로드/전사 완료 대기
     transcript_result = {"mp4": None, "txt": None}
     if transcript_task:
         if not transcript_task.done():
             print("  [INFO] 스크립트 추출 완료 대기 중...")
         transcript_result = await transcript_task
 
-    return {"attended": attended, **transcript_result}
+    return {"attended": attended, "download_only": is_completed, **transcript_result}
