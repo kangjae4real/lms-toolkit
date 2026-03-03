@@ -1,10 +1,13 @@
 import json
-import time
-from faster_whisper import WhisperModel
-from abc import ABC, abstractmethod
 import os
+import time
+from abc import ABC, abstractmethod
+
 import requests
-from src.user_setting import UserSetting
+from dotenv import load_dotenv
+from faster_whisper import WhisperModel
+
+load_dotenv()
 
 # https://developers.rtzr.ai/docs/stt-file/
 
@@ -74,10 +77,11 @@ class WhisperTranscriber(Transcriber):
 
 
 class ReturnZeroTranscriber(Transcriber):
-    def __init__(self):
-        user_setting = UserSetting()
-        self.client_id = user_setting.RETURNZERO_CLIENT_ID
-        self.client_secret = user_setting.RETURNZERO_CLIENT_SECRET
+    def __init__(self, client_id: str | None = None, client_secret: str | None = None):
+        self.client_id = client_id or os.getenv("RETURNZERO_CLIENT_ID")
+        self.client_secret = client_secret or os.getenv("RETURNZERO_CLIENT_SECRET")
+        if not self.client_id or not self.client_secret:
+            raise ValueError("RETURNZERO_CLIENT_ID/SECRET 환경변수가 필요합니다")
         self.token = self._authenticate()
 
     def _authenticate(self) -> str:

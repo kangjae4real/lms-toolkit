@@ -1,18 +1,13 @@
-from abc import ABC, abstractmethod
-from google import genai
-import webbrowser
-from openai import OpenAI
-import pyperclip
-import sys
 import os
+import webbrowser
+from abc import ABC, abstractmethod
 
-from src.user_setting import UserSetting
+import pyperclip
+from dotenv import load_dotenv
+from google import genai
+from openai import OpenAI
 
-
-# def resource_path(relative_path):
-#     if hasattr(sys, '_MEIPASS'):
-#         return os.path.join(sys._MEIPASS, relative_path)
-#     return os.path.join(os.path.abspath("."), relative_path)
+load_dotenv()
 
 
 def summarize_text(txt_path: str, prompt: str, engine: str = "gemini"):
@@ -34,10 +29,12 @@ class Summarizer(ABC):
 
 
 class OpenAISummarizer(Summarizer):
-    def __init__(self, model_name: str = "gpt-4o"):
-        user_setting = UserSetting()
+    def __init__(self, model_name: str = "gpt-4o", api_key: str | None = None):
         self.model_name = model_name
-        self.client = OpenAI(api_key=user_setting.OPENAI_API_KEY)
+        key = api_key or os.getenv("OPENAI_API_KEY")
+        if not key:
+            raise ValueError("OPENAI_API_KEY 환경변수가 필요합니다")
+        self.client = OpenAI(api_key=key)
 
     def summarize(self, txt_path: str, prompt: str) -> str:
         print(f"[DEBUG] 텍스트 파일 읽는 중: {txt_path}")
@@ -74,10 +71,12 @@ class OpenAISummarizer(Summarizer):
 
 
 class GeminiSummarizer(Summarizer):
-    def __init__(self, model_name: str = "gemini-2.5-flash"):
-        user_setting = UserSetting()
+    def __init__(self, model_name: str = "gemini-2.5-flash", api_key: str | None = None):
         self.model_name = model_name
-        self.client = genai.Client(api_key=user_setting.GOOGLE_API_KEY)
+        key = api_key or os.getenv("GOOGLE_API_KEY")
+        if not key:
+            raise ValueError("GOOGLE_API_KEY 환경변수가 필요합니다")
+        self.client = genai.Client(api_key=key)
 
     def summarize(self, txt_path: str, prompt: str) -> str:
         print(f"[DEBUG] 텍스트 파일 읽는 중: {txt_path}")
