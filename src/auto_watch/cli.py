@@ -42,12 +42,15 @@ def select_courses(courses: list[dict]) -> list[dict]:
 
     while True:
         try:
-            choice = input("번호 / all / q: ").strip().lower()
+            choice = input("번호 / all(전체) / b(이전) / q(종료): ").strip().lower()
         except EOFError:
             return []
 
         if choice == "q":
             return []
+
+        if choice == "b":
+            return "back"
 
         if choice == "all":
             return courses
@@ -64,7 +67,7 @@ def select_courses(courses: list[dict]) -> list[dict]:
                 return selected
             print("  유효한 번호를 입력하세요.")
         except ValueError:
-            print("  숫자, all, q 중 하나를 입력하세요.")
+            print("  숫자, all, b, q 중 하나를 입력하세요.")
 
 
 def _format_duration(total_sec: int) -> str:
@@ -172,12 +175,10 @@ def select_lectures(all_lectures: list[dict], download_mode: bool = False) -> li
 
     while True:
         try:
-            if download_mode:
-                prompt = "번호 / all / b(이전) / q: "
-            elif expanded:
-                prompt = "번호 / all / q: "
+            if expanded or download_mode:
+                prompt = "번호 / all(전체) / b(이전) / q(종료): "
             else:
-                prompt = "번호 / all / q / e(펼치기): "
+                prompt = "번호 / all(전체) / b(이전) / q(종료) / e(펼치기): "
             choice = input(prompt).strip().lower()
         except EOFError:
             return []
@@ -185,7 +186,7 @@ def select_lectures(all_lectures: list[dict], download_mode: bool = False) -> li
         if choice == "q":
             return []
 
-        if choice == "b" and download_mode:
+        if choice == "b":
             return "back"
 
         if choice == "all":
@@ -214,7 +215,7 @@ def select_lectures(all_lectures: list[dict], download_mode: bool = False) -> li
                 return selected
             print("  유효한 번호를 입력하세요.")
         except ValueError:
-            valid_cmds = "숫자, all, q, e" if not expanded else "숫자, all, q"
+            valid_cmds = "숫자, all, b, q, e" if not expanded else "숫자, all, b, q"
             print(f"  {valid_cmds} 중 하나를 입력하세요.")
 
 

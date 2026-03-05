@@ -31,6 +31,8 @@ async def _run_watch_mode(page, courses):
         return
 
     selected = select_lectures(all_lectures)
+    if selected == "back":
+        return "back"
     if not selected:
         print("\n[INFO] 선택 없음. 종료.")
         return
@@ -74,6 +76,8 @@ async def _run_download_mode(page, courses):
     """다운로드 모드: 과목 선택 → 강의 선택 → 다운로드/전사만"""
     while True:
         selected_courses = select_courses(courses)
+        if selected_courses == "back":
+            return "back"
         if not selected_courses:
             print("\n[INFO] 선택 없음. 종료.")
             return
@@ -127,8 +131,6 @@ async def main():
     print(f"  시작: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("=" * 60)
 
-    mode = select_mode()
-
     async with async_playwright() as p:
         page, browser, context = await setup_browser(p)
 
@@ -137,10 +139,16 @@ async def main():
             if not courses:
                 return
 
-            if mode == "watch":
-                await _run_watch_mode(page, courses)
-            else:
-                await _run_download_mode(page, courses)
+            while True:
+                mode = select_mode()
+
+                if mode == "watch":
+                    result = await _run_watch_mode(page, courses)
+                else:
+                    result = await _run_download_mode(page, courses)
+
+                if result != "back":
+                    break
 
         finally:
             try:
