@@ -17,26 +17,35 @@
 
 ## 빠른 시작
 
-### 1. 환경 설정
+### 설치 (최초 1회)
+
+```bash
+bash install.sh
+```
+
+Homebrew, Python, ffmpeg, Playwright 등 필요한 모든 것을 자동 설치하고, 학번/비밀번호를 입력받아 `.env` 파일을 생성합니다.
+
+### 실행
+
+```bash
+./run.sh
+```
+
+### 수동 설치 (install.sh 없이)
+
+<details>
+<summary>펼치기</summary>
 
 ```bash
 git clone https://github.com/<your-repo>/lms-summarizer.git
 cd lms-summarizer
 
+brew install ffmpeg
 python3 -m venv .venv
 source .venv/bin/activate
-
 pip3 install -r requirements.txt
 playwright install chromium
 ```
-
-### 2. ffmpeg 설치
-
-```bash
-brew install ffmpeg
-```
-
-### 3. .env 설정
 
 프로젝트 루트에 `.env` 파일 생성:
 
@@ -45,11 +54,13 @@ USERID=학번
 PASSWORD=LMS비밀번호
 ```
 
-### 4. 실행
+실행:
 
 ```bash
 python -m src.auto_watch
 ```
+
+</details>
 
 ## 사용 흐름
 
