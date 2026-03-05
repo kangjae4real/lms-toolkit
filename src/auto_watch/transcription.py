@@ -5,8 +5,8 @@ import traceback
 
 import requests as req_lib
 
-from .config import PROJECT_DIR, OUTPUT_DIR
 from .cli import _safe_filename
+from .config import OUTPUT_DIR, PROJECT_DIR
 
 
 async def download_and_transcribe(video_url: str, course_name: str, title: str) -> dict:
@@ -23,10 +23,11 @@ async def download_and_transcribe(video_url: str, course_name: str, title: str) 
 
     # 1. 다운로드
     try:
+
         def _download():
             headers = {
                 "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                              "AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36",
+                "AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36",
                 "Referer": "https://commons.ssu.ac.kr/",
             }
             resp = req_lib.get(video_url, stream=True, headers=headers)
@@ -42,11 +43,13 @@ async def download_and_transcribe(video_url: str, course_name: str, title: str) 
                         # 50MB마다 중간 보고
                         if total and downloaded - last_report >= 50 * 1024 * 1024:
                             pct = downloaded / total * 100
-                            print(f"  ├ 다운로드: {downloaded // (1024*1024)}MB / {total // (1024*1024)}MB ({pct:.0f}%)")
+                            print(
+                                f"  ├ 다운로드: {downloaded // (1024 * 1024)}MB / {total // (1024 * 1024)}MB ({pct:.0f}%)"
+                            )
                             last_report = downloaded
             return str(mp4_path)
 
-        print(f"  ├ 다운로드: 시작...")
+        print("  ├ 다운로드: 시작...")
         result["mp4"] = await loop.run_in_executor(None, _download)
         size_mb = mp4_path.stat().st_size / (1024 * 1024)
         print(f"  ├ 다운로드: 완료 ({size_mb:.1f}MB)")
@@ -57,20 +60,22 @@ async def download_and_transcribe(video_url: str, course_name: str, title: str) 
 
     # 2. mp4 → wav → txt
     try:
+
         def _transcribe():
             import time
+
             from src.audio_pipeline.converter import convert_mp4_to_wav
             from src.audio_pipeline.transcriber import WhisperTranscriber
 
             wav_path = course_dir / f"{safe_title}.wav"
 
-            print(f"  ├ 스크립트: [1/3] mp4 → wav 변환 중...")
+            print("  ├ 스크립트: [1/3] mp4 → wav 변환 중...")
             convert_mp4_to_wav(str(mp4_path), str(wav_path))
 
-            print(f"  ├ 스크립트: [2/3] Whisper 모델 로딩...")
+            print("  ├ 스크립트: [2/3] Whisper 모델 로딩...")
             transcriber = WhisperTranscriber()
 
-            print(f"  ├ 스크립트: [3/3] 음성 → 텍스트 전사 중...")
+            print("  ├ 스크립트: [3/3] 음성 → 텍스트 전사 중...")
             t_start = time.time()
             transcriber.transcribe(str(wav_path), str(txt_path))
             elapsed = time.time() - t_start

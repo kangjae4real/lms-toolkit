@@ -33,15 +33,15 @@ class Transcriber(ABC):
 
 class WhisperTranscriber(Transcriber):
     def __init__(self, model_name="turbo"):
-        import sys
         import os
+        import sys
 
         device = "cpu"
         compute_type = "int8"
 
         # .app 번들 내부의 모델 확인
-        if getattr(sys, 'frozen', False):
-            model_path = os.path.join(sys._MEIPASS, 'whisper_models', model_name)
+        if getattr(sys, "frozen", False):
+            model_path = os.path.join(sys._MEIPASS, "whisper_models", model_name)
             if os.path.exists(model_path):
                 print(f"[INFO] 번들된 Whisper 모델 사용: {model_path}")
                 self.model = WhisperModel(model_path, device=device, compute_type=compute_type)
@@ -65,7 +65,9 @@ class WhisperTranscriber(Transcriber):
                     pct = segment.end / duration * 100
                     seg_m, seg_s = divmod(int(segment.end), 60)
                     dur_m, dur_s = divmod(int(duration), 60)
-                    print(f"  ├ 스크립트: 전사 {seg_m}:{seg_s:02d}/{dur_m}:{dur_s:02d} ({pct:.0f}%)")
+                    print(
+                        f"  ├ 스크립트: 전사 {seg_m}:{seg_s:02d}/{dur_m}:{dur_s:02d} ({pct:.0f}%)"
+                    )
                     last_report = segment.end
 
             text = "".join(texts)

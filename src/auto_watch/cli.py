@@ -92,12 +92,14 @@ def _group_by_course(lectures: list[dict]) -> OrderedDict:
 
 def _display_lectures(all_lectures: list[dict], expanded: bool) -> list[dict]:
     """강의 목록 표시. 번호가 매겨진 강의 리스트(visible)를 반환."""
-    unwatched = [l for l in all_lectures if not l.get("isCompleted")]
-    completed = [l for l in all_lectures if l.get("isCompleted")]
+    unwatched = [lec for lec in all_lectures if not lec.get("isCompleted")]
+    completed = [lec for lec in all_lectures if lec.get("isCompleted")]
     today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
 
     print("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    print(f"  전체 강의 {len(all_lectures)}개 (미수강 {len(unwatched)} / 수강완료 {len(completed)}):")
+    print(
+        f"  전체 강의 {len(all_lectures)}개 (미수강 {len(unwatched)} / 수강완료 {len(completed)}):"
+    )
     print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
     groups = _group_by_course(all_lectures)
@@ -106,8 +108,8 @@ def _display_lectures(all_lectures: list[dict], expanded: bool) -> list[dict]:
     unwatched_sec = 0
 
     for course_name, items in groups.items():
-        course_unwatched = [l for l in items if not l.get("isCompleted")]
-        course_completed = [l for l in items if l.get("isCompleted")]
+        course_unwatched = [it for it in items if not it.get("isCompleted")]
+        course_completed = [it for it in items if it.get("isCompleted")]
 
         # 과목 헤더
         if expanded:
@@ -152,7 +154,9 @@ def _display_lectures(all_lectures: list[dict], expanded: bool) -> list[dict]:
 
     # 재생시간
     if expanded:
-        print(f"\n  총 재생시간: {_format_duration(total_sec)} (미수강: {_format_duration(unwatched_sec)})")
+        total_fmt = _format_duration(total_sec)
+        unwatched_fmt = _format_duration(unwatched_sec)
+        print(f"\n  총 재생시간: {total_fmt} (미수강: {unwatched_fmt})")
     else:
         print(f"\n  총 재생시간: {_format_duration(unwatched_sec)} (미수강)")
 
@@ -169,7 +173,7 @@ def select_lectures(all_lectures: list[dict], download_mode: bool = False) -> li
     if not all_lectures:
         return []
 
-    unwatched = [l for l in all_lectures if not l.get("isCompleted")]
+    unwatched = [lec for lec in all_lectures if not lec.get("isCompleted")]
     expanded = download_mode
     visible = _display_lectures(all_lectures, expanded=expanded)
 
@@ -225,11 +229,9 @@ def _is_target_video_url(url: str) -> bool:
         return False
     if "commons.ssu.ac.kr" not in url and "commonscdn.com" not in url:
         return False
-    if "intro.mp4" in url or "media_files" not in url:
-        return False
-    return True
+    return "intro.mp4" not in url and "media_files" in url
 
 
 def _safe_filename(name: str) -> str:
     """파일시스템에 안전한 파일명으로 변환"""
-    return re.sub(r'[\\/:*?"<>|]', '_', name).strip()
+    return re.sub(r'[\\/:*?"<>|]', "_", name).strip()

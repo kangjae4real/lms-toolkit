@@ -40,7 +40,7 @@ class OpenAISummarizer(Summarizer):
 
     def summarize(self, txt_path: str, prompt: str) -> str:
         print(f"[DEBUG] 텍스트 파일 읽는 중: {txt_path}")
-        with open(txt_path, "r", encoding="utf-8") as f:
+        with open(txt_path, encoding="utf-8") as f:
             content = f.read()
 
         print(f"[DEBUG] 텍스트 길이: {len(content)}자")
@@ -59,7 +59,9 @@ class OpenAISummarizer(Summarizer):
 
         print("[DEBUG] OpenAI API 호출 시작...")
         try:
-            response = self.client.chat.completions.create( model=self.model_name, messages=messages, temperature=0.7, max_tokens=1024 )
+            response = self.client.chat.completions.create(
+                model=self.model_name, messages=messages, temperature=0.7, max_tokens=1024
+            )
 
             print("[DEBUG] OpenAI API 응답 받음")
             summary = response.choices[0].message.content
@@ -69,7 +71,7 @@ class OpenAISummarizer(Summarizer):
         except Exception as e:
             print(f"[ERROR] OpenAI API 호출 실패: {e}")
             print(f"[ERROR] 오류 타입: {type(e).__name__}")
-            return f"요약 생성 실패: {str(e)}"
+            return f"요약 생성 실패: {e!s}"
 
 
 class GeminiSummarizer(Summarizer):
@@ -82,7 +84,7 @@ class GeminiSummarizer(Summarizer):
 
     def summarize(self, txt_path: str, prompt: str) -> str:
         print(f"[DEBUG] 텍스트 파일 읽는 중: {txt_path}")
-        with open(txt_path, "r", encoding="utf-8") as f:
+        with open(txt_path, encoding="utf-8") as f:
             content = f.read()
 
         print(f"[DEBUG] 텍스트 길이: {len(content)}자")
@@ -104,7 +106,7 @@ class GeminiSummarizer(Summarizer):
         except Exception as e:
             print(f"[ERROR] Google Gemini API 호출 실패: {e}")
             print(f"[ERROR] 오류 타입: {type(e).__name__}")
-            return f"요약 생성 실패: {str(e)}"
+            return f"요약 생성 실패: {e!s}"
 
 
 class ChatGPTSummarizer(Summarizer):
@@ -112,15 +114,13 @@ class ChatGPTSummarizer(Summarizer):
         self.chat_url = "https://chat.openai.com/chat"
 
     def summarize(self, txt_path: str, prompt: str):
-        with open(txt_path, "r", encoding="utf-8") as f:
+        with open(txt_path, encoding="utf-8") as f:
             content = f.read()
 
         final_prompt = f"{prompt}\n\n다음 텍스트를 요약해줘:\n\n{content}"
 
         pyperclip.copy(final_prompt)  # 클립보드에 복사
-        print(
-            "[INFO] 프롬프트가 클립보드에 복사되었습니다. 브라우저로 이동 후 붙여넣기 하세요."
-        )
+        print("[INFO] 프롬프트가 클립보드에 복사되었습니다. 브라우저로 이동 후 붙여넣기 하세요.")
         webbrowser.open(self.chat_url)
 
 

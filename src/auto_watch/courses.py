@@ -4,8 +4,8 @@ import asyncio
 
 from playwright.async_api import Page
 
+from .browser import get_tool_content_frame, login_if_needed
 from .config import BASE_URL, MYPAGE_URL
-from .browser import login_if_needed, get_tool_content_frame
 
 
 async def get_courses(page: Page) -> list[dict]:
@@ -160,8 +160,8 @@ async def get_lectures(page: Page, course_id: str, course_name: str = "") -> lis
     for lec in lectures:
         lec["courseName"] = course_name
 
-    unwatched = [l for l in lectures if not l["isCompleted"]]
-    completed = [l for l in lectures if l["isCompleted"]]
+    unwatched = [lec for lec in lectures if not lec["isCompleted"]]
+    completed = [lec for lec in lectures if lec["isCompleted"]]
     print(f"[INFO] 강의 {len(lectures)}개 (미수강 {len(unwatched)} / 수강완료 {len(completed)}):")
     for lec in lectures:
         m, s = divmod(lec["durationSec"], 60)

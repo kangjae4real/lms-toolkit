@@ -3,9 +3,9 @@
 import asyncio
 import sys
 
-from playwright.async_api import Page, Frame
+from playwright.async_api import Frame, Page
 
-from .config import USERID, PASSWORD
+from .config import PASSWORD, USERID
 
 
 async def setup_browser(playwright):

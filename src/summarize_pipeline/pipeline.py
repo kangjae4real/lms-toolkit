@@ -1,8 +1,8 @@
-import time
-import sys
 import os
-from src.summarize_pipeline.summarizer import summarize_text
+import time
 from pathlib import Path
+
+from src.summarize_pipeline.summarizer import summarize_text
 
 
 class SummarizePipeline:
@@ -23,7 +23,7 @@ class SummarizePipeline:
         print(f"[INFO] 요약 완료: {summary}")
         print(f"[INFO] 총 소요 시간: {end_time - start_time}초")
 
-        with open(output_path, 'w', encoding='utf-8') as f:
+        with open(output_path, "w", encoding="utf-8") as f:
             f.write(summary)
 
         print(f"[INFO] 요약 저장 완료: {output_path}")

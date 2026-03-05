@@ -1,16 +1,17 @@
 """메인 오케스트레이터"""
 
 import asyncio
+import contextlib
 import sys
 from datetime import datetime
 
 from playwright.async_api import async_playwright
 
-from .config import USERID, PASSWORD
 from .browser import setup_browser
+from .cli import select_courses, select_lectures, select_mode
+from .config import PASSWORD, USERID
 from .courses import get_courses, get_lectures
 from .player import process_lecture
-from .cli import select_mode, select_courses, select_lectures
 
 
 async def _run_watch_mode(page, courses):
@@ -37,7 +38,7 @@ async def _run_watch_mode(page, courses):
         print("\n[INFO] 선택 없음. 종료.")
         return
 
-    sel_total = sum(l["durationSec"] for l in selected)
+    sel_total = sum(lec["durationSec"] for lec in selected)
     sel_m, sel_s = divmod(sel_total, 60)
     print(f"\n[INFO] {len(selected)}개 선택, 총 {sel_m}:{sel_s:02d}")
 
@@ -60,7 +61,7 @@ async def _run_watch_mode(page, courses):
         await asyncio.sleep(3)
 
     print(f"\n{'═' * 40}")
-    print(f"  완료!")
+    print("  완료!")
     if watch_completed:
         print(f"  수강 처리: {watch_completed}개")
     if download_only:
@@ -98,7 +99,7 @@ async def _run_download_mode(page, courses):
             print("\n[INFO] 선택 없음. 종료.")
             return
 
-        sel_total = sum(l["durationSec"] for l in selected)
+        sel_total = sum(lec["durationSec"] for lec in selected)
         sel_m, sel_s = divmod(sel_total, 60)
         print(f"\n[INFO] {len(selected)}개 선택, 총 {sel_m}:{sel_s:02d}")
 
@@ -113,7 +114,7 @@ async def _run_download_mode(page, courses):
             await asyncio.sleep(3)
 
         print(f"\n{'═' * 40}")
-        print(f"  완료!")
+        print("  완료!")
         print(f"  다운로드: {len(selected)}개")
         if transcribed:
             print(f"  스크립트: {transcribed}개 추출 → output/")
@@ -137,7 +138,7 @@ async def main():
     print("=" * 60)
 
     async with async_playwright() as p:
-        page, browser, context = await setup_browser(p)
+        page, browser, _context = await setup_browser(p)
 
         try:
             courses = await get_courses(page)
@@ -156,8 +157,6 @@ async def main():
                     break
 
         finally:
-            try:
+            with contextlib.suppress(EOFError):
                 input("\n 엔터를 누르면 브라우저를 닫습니다...")
-            except EOFError:
-                pass
             await browser.close()

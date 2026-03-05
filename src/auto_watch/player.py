@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from datetime import datetime
 
-from playwright.async_api import Page, Frame, Request
+from playwright.async_api import Frame, Page, Request
 
 from .browser import get_tool_content_frame
 from .cli import _is_target_video_url
@@ -37,7 +38,9 @@ async def _enter_lecture_page(page: Page, lecture: dict) -> Frame | None:
     # "이전에 시청했던 XX:XX부터 이어서 보시겠습니까?" 다이얼로그 처리
     try:
         ok_btn = await commons.wait_for_selector(
-            ".confirm-ok-btn", timeout=5000, state="visible",
+            ".confirm-ok-btn",
+            timeout=5000,
+            state="visible",
         )
         if ok_btn:
             await ok_btn.click()
@@ -72,7 +75,9 @@ async def _click_play_and_capture_url(page: Page, commons: Frame) -> str | None:
     # 재생 버튼 클릭 후 인트로 재생 → 이어보기 다이얼로그가 뜰 수 있음 (~5초 소요)
     try:
         ok_btn = await commons.wait_for_selector(
-            ".confirm-ok-btn", timeout=10000, state="visible",
+            ".confirm-ok-btn",
+            timeout=10000,
+            state="visible",
         )
         if ok_btn:
             await ok_btn.click()
@@ -123,7 +128,11 @@ async def _monitor_playback(commons: Frame, title: str, duration_sec: int) -> bo
             progress = None
 
         if progress:
-            pct = (progress["currentTime"] / progress["duration"] * 100) if progress["duration"] else 0
+            pct = (
+                (progress["currentTime"] / progress["duration"] * 100)
+                if progress["duration"]
+                else 0
+            )
             cur_m, cur_s = divmod(int(progress["currentTime"]), 60)
             dur_m, dur_s = divmod(int(progress["duration"]), 60)
 
@@ -144,7 +153,7 @@ async def _monitor_playback(commons: Frame, title: str, duration_sec: int) -> bo
             # 일시정지 감지 → 자동 재개
             if progress["paused"] and progress["currentTime"] > 1:
                 print(f"  [WARN] 일시정지 감지 ({pct:.1f}%), 재개 시도...")
-                try:
+                with contextlib.suppress(Exception):
                     await commons.evaluate("""
                         () => {
                             const videos = document.querySelectorAll('video');
@@ -153,8 +162,6 @@ async def _monitor_playback(commons: Frame, title: str, duration_sec: int) -> bo
                             }
                         }
                     """)
-                except Exception:
-                    pass
 
         # 타임아웃
         if elapsed > timeout_sec:
@@ -209,12 +216,12 @@ async def process_lecture(page: Page, lecture: dict) -> dict:
     # 공통: 다운로드+전사 시작
     transcript_task = None
     if video_url:
-        print(f"  ├ 영상 URL 캡처 완료")
+        print("  ├ 영상 URL 캡처 완료")
         transcript_task = asyncio.create_task(
             download_and_transcribe(video_url, course_name, title)
         )
     else:
-        print(f"  ├ 영상 URL 미감지 — 스크립트 추출 건너뜀")
+        print("  ├ 영상 URL 미감지 — 스크립트 추출 건너뜀")
 
     # 미수강: 재생 진행 모니터링
     attended = False
