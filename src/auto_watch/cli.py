@@ -161,18 +161,21 @@ def _display_lectures(all_lectures: list[dict], expanded: bool) -> list[dict]:
     return visible
 
 
-def select_lectures(all_lectures: list[dict]) -> list[dict]:
+def select_lectures(all_lectures: list[dict], download_mode: bool = False) -> list[dict]:
     """강의 목록 표시 (접기/펼치기) + 사용자 선택 → 선택된 강의 리스트 반환"""
     if not all_lectures:
         return []
 
     unwatched = [l for l in all_lectures if not l.get("isCompleted")]
-    expanded = False
-    visible = _display_lectures(all_lectures, expanded=False)
+    expanded = download_mode
+    visible = _display_lectures(all_lectures, expanded=expanded)
 
     while True:
         try:
-            prompt = "번호 / all / q / e(펼치기): " if not expanded else "번호 / all / q: "
+            if download_mode or expanded:
+                prompt = "번호 / all / q: "
+            else:
+                prompt = "번호 / all / q / e(펼치기): "
             choice = input(prompt).strip().lower()
         except EOFError:
             return []
@@ -181,12 +184,14 @@ def select_lectures(all_lectures: list[dict]) -> list[dict]:
             return []
 
         if choice == "all":
+            if download_mode:
+                return all_lectures
             if unwatched:
                 return unwatched
             print("  미수강 강의가 없습니다. 'e'로 수강완료 강의를 펼쳐보세요.")
             continue
 
-        if choice == "e" and not expanded:
+        if choice == "e" and not expanded and not download_mode:
             expanded = True
             visible = _display_lectures(all_lectures, expanded=True)
             continue

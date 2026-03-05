@@ -86,7 +86,7 @@ async def _run_download_mode(page, courses):
         print("\n[INFO] 강의 없음!")
         return
 
-    selected = select_lectures(all_lectures)
+    selected = select_lectures(all_lectures, download_mode=True)
     if not selected:
         print("\n[INFO] 선택 없음. 종료.")
         return
