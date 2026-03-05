@@ -7,6 +7,66 @@ from collections import OrderedDict
 from datetime import datetime
 
 
+def select_mode() -> str:
+    """시작 시 모드 선택. 'watch' 또는 'download' 반환."""
+    print("\n모드를 선택하세요:")
+    print("  [1] 자동 수강 — 미수강 동영상 재생 + 다운로드/전사")
+    print("  [2] 다운로드  — 과목 선택 → 강의 다운로드/전사만")
+
+    while True:
+        try:
+            choice = input("\n번호 (1/2): ").strip()
+        except EOFError:
+            return "watch"
+
+        if choice == "1":
+            return "watch"
+        if choice == "2":
+            return "download"
+        print("  1 또는 2를 입력하세요.")
+
+
+def select_courses(courses: list[dict]) -> list[dict]:
+    """과목 목록 표시 → 사용자 선택 (주차학습 페이지 미진입)"""
+    print("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print(f"  과목 {len(courses)}개:")
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    for i, c in enumerate(courses, 1):
+        if c["videoCount"] > 0:
+            print(f"  [{i}] {c['name']} (미수강 {c['videoCount']}개)")
+        else:
+            print(f"  [{i}] {c['name']} (수강 완료)")
+
+    print()
+
+    while True:
+        try:
+            choice = input("번호 / all / q: ").strip().lower()
+        except EOFError:
+            return []
+
+        if choice == "q":
+            return []
+
+        if choice == "all":
+            return courses
+
+        try:
+            indices = [int(x.strip()) for x in choice.split(",") if x.strip()]
+            selected = []
+            for idx in indices:
+                if 1 <= idx <= len(courses):
+                    selected.append(courses[idx - 1])
+                else:
+                    print(f"  [WARN] {idx}번은 범위 밖 (1~{len(courses)})")
+            if selected:
+                return selected
+            print("  유효한 번호를 입력하세요.")
+        except ValueError:
+            print("  숫자, all, q 중 하나를 입력하세요.")
+
+
 def _format_duration(total_sec: int) -> str:
     """초를 H:MM:SS 또는 M:SS 형식으로 변환"""
     total_m, total_s = divmod(total_sec, 60)

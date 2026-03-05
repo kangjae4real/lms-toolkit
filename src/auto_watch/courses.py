@@ -86,6 +86,14 @@ async def get_lectures(page: Page, course_id: str, course_name: str = "") -> lis
                 const link = item.querySelector('a.xnmb-module_item-left-title');
                 if (!link) return null;
 
+                // 아이콘 클래스로 항목 타입 판별 (movie / file / assignment 등)
+                const iconEl = item.querySelector('i.xnmb-module_item-icon');
+                const iconClasses = iconEl ? iconEl.className : '';
+                const itemType = iconClasses.includes('movie') ? 'movie'
+                    : iconClasses.includes('file') ? 'file'
+                    : iconClasses.includes('assignment') ? 'assignment'
+                    : 'other';
+
                 const href = link.href || '';
                 const title = link.textContent?.trim() || '';
 
@@ -130,9 +138,12 @@ async def get_lectures(page: Page, course_id: str, course_name: str = "") -> lis
                     }
                 }
 
-                return { title, href, isCompleted, durationSec, startDate: startDate?.toISOString() || null, deadline: deadline?.toISOString() || null };
+                return { title, href, isCompleted, durationSec, itemType, startDate: startDate?.toISOString() || null, deadline: deadline?.toISOString() || null };
             }).filter(item => {
-                if (!item || !item.href || item.durationSec <= 0) return false;
+                if (!item || !item.href) return false;
+                // 동영상(movie) 타입만 통과
+                if (item.itemType !== 'movie') return false;
+                if (item.durationSec <= 0) return false;
                 // 시작일이 있으면 오늘 이후인 것은 제외
                 if (item.startDate) {
                     const today = new Date();
