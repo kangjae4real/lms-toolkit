@@ -1,7 +1,5 @@
 """config.py 상수 테스트"""
 
-from pathlib import Path
-
 from src.auto_watch.config import (
     BASE_URL,
     CHROME_PATH,
