@@ -6,7 +6,13 @@ import traceback
 import requests as req_lib
 
 from .cli import _safe_filename
-from .config import OUTPUT_DIR, PROJECT_DIR
+from .config import (
+    DOWNLOAD_CHUNK_SIZE,
+    DOWNLOAD_REPORT_INTERVAL,
+    OUTPUT_DIR,
+    PROJECT_DIR,
+    USER_AGENT,
+)
 
 
 async def download_and_transcribe(video_url: str, course_name: str, title: str) -> dict:
@@ -26,8 +32,7 @@ async def download_and_transcribe(video_url: str, course_name: str, title: str) 
 
         def _download():
             headers = {
-                "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 Chrome/122.0.0.0 Safari/537.36",
+                "User-Agent": USER_AGENT,
                 "Referer": "https://commons.ssu.ac.kr/",
             }
             resp = req_lib.get(video_url, stream=True, headers=headers)
@@ -36,12 +41,12 @@ async def download_and_transcribe(video_url: str, course_name: str, title: str) 
             downloaded = 0
             last_report = 0
             with open(mp4_path, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=65536):
+                for chunk in resp.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
                     if chunk:
                         f.write(chunk)
                         downloaded += len(chunk)
                         # 50MB마다 중간 보고
-                        if total and downloaded - last_report >= 50 * 1024 * 1024:
+                        if total and downloaded - last_report >= DOWNLOAD_REPORT_INTERVAL:
                             pct = downloaded / total * 100
                             print(
                                 f"  ├ 다운로드: {downloaded // (1024 * 1024)}MB / {total // (1024 * 1024)}MB ({pct:.0f}%)"

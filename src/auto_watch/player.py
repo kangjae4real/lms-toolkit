@@ -10,6 +10,15 @@ from playwright.async_api import Frame, Page, Request
 
 from .browser import get_tool_content_frame
 from .cli import _is_target_video_url
+from .config import (
+    IFRAME_TIMEOUT_MS,
+    PLAYBACK_COMPLETION_THRESHOLD,
+    PLAYBACK_LOG_INTERVAL_SEC,
+    PLAYBACK_TIMEOUT_BUFFER_SEC,
+    RESUME_DIALOG_POST_PLAY_TIMEOUT_MS,
+    RESUME_DIALOG_TIMEOUT_MS,
+    SELECTOR_TIMEOUT_MS,
+)
 from .transcription import download_and_transcribe
 
 
@@ -27,7 +36,7 @@ async def _enter_lecture_page(page: Page, lecture: dict) -> Frame | None:
     await page.goto(lecture["href"], wait_until="networkidle")
 
     tool_frame = await get_tool_content_frame(page)
-    await tool_frame.wait_for_selector(".xnlailvc-commons-frame", timeout=20000)
+    await tool_frame.wait_for_selector(".xnlailvc-commons-frame", timeout=IFRAME_TIMEOUT_MS)
     await asyncio.sleep(3)
 
     commons = find_commons_frame(page)
@@ -39,7 +48,7 @@ async def _enter_lecture_page(page: Page, lecture: dict) -> Frame | None:
     try:
         ok_btn = await commons.wait_for_selector(
             ".confirm-ok-btn",
-            timeout=5000,
+            timeout=RESUME_DIALOG_TIMEOUT_MS,
             state="visible",
         )
         if ok_btn:
@@ -63,7 +72,7 @@ async def _click_play_and_capture_url(page: Page, commons: Frame) -> str | None:
     page.on("request", on_request)
 
     try:
-        await commons.wait_for_selector(".vc-front-screen-play-btn", timeout=15000)
+        await commons.wait_for_selector(".vc-front-screen-play-btn", timeout=SELECTOR_TIMEOUT_MS)
         await asyncio.sleep(1)
         await commons.click(".vc-front-screen-play-btn")
         print("[INFO] 재생 시작")
@@ -76,7 +85,7 @@ async def _click_play_and_capture_url(page: Page, commons: Frame) -> str | None:
     try:
         ok_btn = await commons.wait_for_selector(
             ".confirm-ok-btn",
-            timeout=10000,
+            timeout=RESUME_DIALOG_POST_PLAY_TIMEOUT_MS,
             state="visible",
         )
         if ok_btn:
@@ -100,7 +109,7 @@ async def _click_play_and_capture_url(page: Page, commons: Frame) -> str | None:
 async def _monitor_playback(commons: Frame, title: str, duration_sec: int) -> bool:
     """재생 진행 모니터링. 수강 완료 시 True 반환."""
     start_time = datetime.now()
-    timeout_sec = duration_sec + 60  # 1분 여유
+    timeout_sec = duration_sec + PLAYBACK_TIMEOUT_BUFFER_SEC
     last_log_time = 0
 
     while True:
@@ -137,7 +146,7 @@ async def _monitor_playback(commons: Frame, title: str, duration_sec: int) -> bo
             dur_m, dur_s = divmod(int(progress["duration"]), 60)
 
             # 30초마다 로그 출력
-            if progress["currentTime"] - last_log_time >= 30 or pct >= 99:
+            if progress["currentTime"] - last_log_time >= PLAYBACK_LOG_INTERVAL_SEC or pct >= 99:
                 print(
                     f"  [{cur_m}:{cur_s:02d} / {dur_m}:{dur_s:02d}] "
                     f"{pct:.1f}% | {progress['rate']}x"
@@ -145,7 +154,7 @@ async def _monitor_playback(commons: Frame, title: str, duration_sec: int) -> bo
                 last_log_time = progress["currentTime"]
 
             # 완료 체크
-            if progress["ended"] or pct >= 99.5:
+            if progress["ended"] or pct >= PLAYBACK_COMPLETION_THRESHOLD:
                 print(f"[DONE] {title} 수강 완료!")
                 await asyncio.sleep(3)  # 완료 이벤트가 서버에 전송될 시간
                 return True

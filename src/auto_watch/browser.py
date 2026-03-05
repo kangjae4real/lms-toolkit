@@ -5,14 +5,14 @@ import sys
 
 from playwright.async_api import Frame, Page
 
-from .config import PASSWORD, USERID
+from .config import CHROME_PATH, LOGIN_TIMEOUT_MS, PASSWORD, USER_AGENT, USERID
 
 
 async def setup_browser(playwright):
     """Playwright headed 브라우저 설정 (봇 탐지 우회 포함)"""
     browser = await playwright.chromium.launch(
         headless=False,
-        executable_path="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+        executable_path=CHROME_PATH,
         args=[
             "--disable-blink-features=AutomationControlled",
             "--enable-proprietary-codecs",
@@ -21,11 +21,7 @@ async def setup_browser(playwright):
     )
 
     context = await browser.new_context(
-        user_agent=(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) "
-            "Chrome/122.0.0.0 Safari/537.36"
-        ),
+        user_agent=USER_AGENT,
         permissions=["camera", "microphone"],
     )
 
@@ -52,7 +48,7 @@ async def login_if_needed(page: Page):
         await page.wait_for_load_state("networkidle")
 
     # SSO 로그인 폼 입력 (type으로 키보드 시뮬레이션)
-    await page.wait_for_selector("input#userid", timeout=10000)
+    await page.wait_for_selector("input#userid", timeout=LOGIN_TIMEOUT_MS)
 
     # 기존 값 클리어 후 타이핑
     await page.click("input#userid")
