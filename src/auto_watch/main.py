@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import logging
 import sys
 from datetime import datetime
 
@@ -11,7 +12,10 @@ from .browser import setup_browser
 from .cli import select_courses, select_lectures, select_mode
 from .config import PASSWORD, USERID
 from .courses import get_courses, get_lectures
+from .log import setup_logging
 from .player import process_lecture
+
+logger = logging.getLogger(__name__)
 
 
 async def _run_watch_mode(page, courses):
@@ -19,7 +23,7 @@ async def _run_watch_mode(page, courses):
     target_courses = [c for c in courses if c["videoCount"] > 0]
 
     if not target_courses:
-        print("\n[INFO] 미수강 동영상이 없습니다!")
+        logger.info("미수강 동영상이 없습니다!")
         return
 
     all_lectures = []
@@ -28,19 +32,19 @@ async def _run_watch_mode(page, courses):
         all_lectures.extend(lectures)
 
     if not all_lectures:
-        print("\n[INFO] 강의 없음!")
+        logger.info("강의 없음!")
         return
 
     selected = select_lectures(all_lectures)
     if selected == "back":
         return "back"
     if not selected:
-        print("\n[INFO] 선택 없음. 종료.")
+        logger.info("선택 없음. 종료.")
         return
 
     sel_total = sum(lec["durationSec"] for lec in selected)
     sel_m, sel_s = divmod(sel_total, 60)
-    print(f"\n[INFO] {len(selected)}개 선택, 총 {sel_m}:{sel_s:02d}")
+    logger.info("%d개 선택, 총 %d:%02d", len(selected), sel_m, sel_s)
 
     watch_completed = 0
     download_only = 0
@@ -80,7 +84,7 @@ async def _run_download_mode(page, courses):
         if selected_courses == "back":
             return "back"
         if not selected_courses:
-            print("\n[INFO] 선택 없음. 종료.")
+            logger.info("선택 없음. 종료.")
             return
 
         all_lectures = []
@@ -89,19 +93,19 @@ async def _run_download_mode(page, courses):
             all_lectures.extend(lectures)
 
         if not all_lectures:
-            print("\n[INFO] 강의 없음!")
+            logger.info("강의 없음!")
             continue
 
         selected = select_lectures(all_lectures, download_mode=True)
         if selected == "back":
             continue
         if not selected:
-            print("\n[INFO] 선택 없음. 종료.")
+            logger.info("선택 없음. 종료.")
             return
 
         sel_total = sum(lec["durationSec"] for lec in selected)
         sel_m, sel_s = divmod(sel_total, 60)
-        print(f"\n[INFO] {len(selected)}개 선택, 총 {sel_m}:{sel_s:02d}")
+        logger.info("%d개 선택, 총 %d:%02d", len(selected), sel_m, sel_s)
 
         transcribed = 0
 
@@ -124,12 +128,15 @@ async def _run_download_mode(page, courses):
 
 def cli_entry():
     """project.scripts 엔트리포인트"""
+    setup_logging()
     asyncio.run(main())
 
 
 async def main():
+    setup_logging()
+
     if not USERID or not PASSWORD:
-        print("[ERROR] .env에 USERID와 PASSWORD를 설정하세요")
+        logger.error(".env에 USERID와 PASSWORD를 설정하세요")
         sys.exit(1)
 
     print("=" * 60)

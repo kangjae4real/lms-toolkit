@@ -1,11 +1,14 @@
 """Playwright 브라우저 설정 및 LMS 인증"""
 
 import asyncio
+import logging
 import sys
 
 from playwright.async_api import Frame, Page
 
 from .config import CHROME_PATH, LOGIN_TIMEOUT_MS, PASSWORD, USER_AGENT, USERID
+
+logger = logging.getLogger(__name__)
 
 
 async def setup_browser(playwright):
@@ -39,7 +42,7 @@ async def login_if_needed(page: Page):
     if "login" not in page.url and "smartid" not in page.url:
         return
 
-    print(f"[INFO] 로그인 필요 — {page.url}")
+    logger.info("로그인 필요 — %s", page.url)
 
     # Canvas 로그인 페이지 → SSO 버튼 클릭
     login_btn = await page.query_selector(".login_btn a")
@@ -78,7 +81,7 @@ async def login_if_needed(page: Page):
         await asyncio.sleep(2)
         current_url = page.url
         if i % 5 == 0:
-            print(f"[INFO] 리디렉션 대기... ({current_url[:60]})")
+            logger.info("리디렉션 대기... (%s)", current_url[:60])
 
         if "canvas.ssu.ac.kr" in current_url and "login" not in current_url:
             break
@@ -94,14 +97,14 @@ async def login_if_needed(page: Page):
                 }
             """)
             if error_msg:
-                print(f"[ERROR] SSO 에러: {error_msg}")
+                logger.error("SSO 에러: %s", error_msg)
                 break
 
     if "login" in page.url or "smartid" in page.url:
-        print("[ERROR] 로그인 실패 — .env의 USERID/PASSWORD 확인 필요")
+        logger.error("로그인 실패 — .env의 USERID/PASSWORD 확인 필요")
         sys.exit(1)
 
-    print(f"[INFO] 로그인 성공 — {page.url}")
+    logger.info("로그인 성공 — %s", page.url)
 
 
 async def get_tool_content_frame(page: Page, timeout: int = 15000) -> Frame:

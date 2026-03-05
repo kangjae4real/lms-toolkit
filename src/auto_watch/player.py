@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import logging
 from datetime import datetime
 
 from playwright.async_api import Frame, Page, Request
@@ -20,6 +21,8 @@ from .config import (
     SELECTOR_TIMEOUT_MS,
 )
 from .transcription import download_and_transcribe
+
+logger = logging.getLogger(__name__)
 
 
 def find_commons_frame(page: Page) -> Frame | None:
@@ -41,7 +44,7 @@ async def _enter_lecture_page(page: Page, lecture: dict) -> Frame | None:
 
     commons = find_commons_frame(page)
     if not commons:
-        print("[ERROR] commons.ssu.ac.kr iframe을 찾을 수 없음")
+        logger.error("commons.ssu.ac.kr iframe을 찾을 수 없음")
         return None
 
     # "이전에 시청했던 XX:XX부터 이어서 보시겠습니까?" 다이얼로그 처리
@@ -53,7 +56,7 @@ async def _enter_lecture_page(page: Page, lecture: dict) -> Frame | None:
         )
         if ok_btn:
             await ok_btn.click()
-            print("[INFO] 이어보기 다이얼로그 → '예' (이어서 재생)")
+            logger.info("이어보기 다이얼로그 → '예' (이어서 재생)")
             await asyncio.sleep(1)
     except Exception:
         pass  # 다이얼로그가 안 뜨면 정상 — 처음 보는 강의
@@ -75,9 +78,9 @@ async def _click_play_and_capture_url(page: Page, commons: Frame) -> str | None:
         await commons.wait_for_selector(".vc-front-screen-play-btn", timeout=SELECTOR_TIMEOUT_MS)
         await asyncio.sleep(1)
         await commons.click(".vc-front-screen-play-btn")
-        print("[INFO] 재생 시작")
+        logger.info("재생 시작")
     except Exception as e:
-        print(f"[ERROR] 재생 버튼 클릭 실패: {e}")
+        logger.error("재생 버튼 클릭 실패: %s", e)
         page.remove_listener("request", on_request)
         return None
 
@@ -90,7 +93,7 @@ async def _click_play_and_capture_url(page: Page, commons: Frame) -> str | None:
         )
         if ok_btn:
             await ok_btn.click()
-            print("[INFO] 이어보기 다이얼로그 → '예' (이어서 재생)")
+            logger.info("이어보기 다이얼로그 → '예' (이어서 재생)")
     except Exception:
         pass
 
@@ -147,21 +150,26 @@ async def _monitor_playback(commons: Frame, title: str, duration_sec: int) -> bo
 
             # 30초마다 로그 출력
             if progress["currentTime"] - last_log_time >= PLAYBACK_LOG_INTERVAL_SEC or pct >= 99:
-                print(
-                    f"  [{cur_m}:{cur_s:02d} / {dur_m}:{dur_s:02d}] "
-                    f"{pct:.1f}% | {progress['rate']}x"
+                logger.info(
+                    "[%d:%02d / %d:%02d] %.1f%% | %sx",
+                    cur_m,
+                    cur_s,
+                    dur_m,
+                    dur_s,
+                    pct,
+                    progress["rate"],
                 )
                 last_log_time = progress["currentTime"]
 
             # 완료 체크
             if progress["ended"] or pct >= PLAYBACK_COMPLETION_THRESHOLD:
-                print(f"[DONE] {title} 수강 완료!")
+                logger.info("[DONE] %s 수강 완료!", title)
                 await asyncio.sleep(3)  # 완료 이벤트가 서버에 전송될 시간
                 return True
 
             # 일시정지 감지 → 자동 재개
             if progress["paused"] and progress["currentTime"] > 1:
-                print(f"  [WARN] 일시정지 감지 ({pct:.1f}%), 재개 시도...")
+                logger.warning("일시정지 감지 (%.1f%%), 재개 시도...", pct)
                 with contextlib.suppress(Exception):
                     await commons.evaluate("""
                         () => {
@@ -174,7 +182,7 @@ async def _monitor_playback(commons: Frame, title: str, duration_sec: int) -> bo
 
         # 타임아웃
         if elapsed > timeout_sec:
-            print(f"[WARN] 타임아웃 ({elapsed:.0f}s). 다음 강의로 이동.")
+            logger.warning("타임아웃 (%.0fs). 다음 강의로 이동.", elapsed)
             return False
 
         await asyncio.sleep(5)
@@ -194,9 +202,9 @@ async def process_lecture(page: Page, lecture: dict) -> dict:
     m, s = divmod(duration_sec, 60)
     print(f"\n{'─' * 50}")
     if is_completed:
-        print(f"[DL] {title} (수강완료 — 다운로드만)")
+        logger.info("[DL] %s (수강완료 — 다운로드만)", title)
     else:
-        print(f"[PLAY] {title} ({m}:{s:02d})")
+        logger.info("[PLAY] %s (%d:%02d)", title, m, s)
     print(f"{'─' * 50}")
 
     # 공통: 페이지 진입 + iframe 준비
@@ -218,19 +226,19 @@ async def process_lecture(page: Page, lecture: dict) -> dict:
                     }
                 }
             """)
-            print("[INFO] 비디오 정지 (수강완료 — URL 캡처 완료)")
+            logger.info("비디오 정지 (수강완료 — URL 캡처 완료)")
         except Exception:
             pass
 
     # 공통: 다운로드+전사 시작
     transcript_task = None
     if video_url:
-        print("  ├ 영상 URL 캡처 완료")
+        logger.info("영상 URL 캡처 완료")
         transcript_task = asyncio.create_task(
             download_and_transcribe(video_url, course_name, title)
         )
     else:
-        print("  ├ 영상 URL 미감지 — 스크립트 추출 건너뜀")
+        logger.info("영상 URL 미감지 — 스크립트 추출 건너뜀")
 
     # 미수강: 재생 진행 모니터링
     attended = False
@@ -241,7 +249,7 @@ async def process_lecture(page: Page, lecture: dict) -> dict:
     transcript_result = {"mp4": None, "txt": None}
     if transcript_task:
         if not transcript_task.done():
-            print("  [INFO] 스크립트 추출 완료 대기 중...")
+            logger.info("스크립트 추출 완료 대기 중...")
         transcript_result = await transcript_task
 
     return {"attended": attended, "download_only": is_completed, **transcript_result}

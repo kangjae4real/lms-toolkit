@@ -1,16 +1,19 @@
 """과목 및 강의 탐색"""
 
 import asyncio
+import logging
 
 from playwright.async_api import Page
 
 from .browser import get_tool_content_frame, login_if_needed
 from .config import BASE_URL, MYPAGE_URL
 
+logger = logging.getLogger(__name__)
+
 
 async def get_courses(page: Page) -> list[dict]:
     """마이페이지에서 모든 과목 목록 반환"""
-    print("\n[INFO] 마이페이지에서 과목 탐색 중...")
+    logger.info("마이페이지에서 과목 탐색 중...")
     await page.goto(MYPAGE_URL, wait_until="networkidle")
     await login_if_needed(page)
 
@@ -44,16 +47,16 @@ async def get_courses(page: Page) -> list[dict]:
     """)
 
     if not courses:
-        print("[INFO] 수강 중인 과목이 없습니다")
+        logger.info("수강 중인 과목이 없습니다")
         return courses
 
     unwatched_count = sum(1 for c in courses if c["videoCount"] > 0)
-    print(f"[INFO] 과목 {len(courses)}개 발견 (미수강 동영상 있는 과목: {unwatched_count}개):")
+    logger.info("과목 %d개 발견 (미수강 동영상 있는 과목: %d개)", len(courses), unwatched_count)
     for c in courses:
         if c["videoCount"] > 0:
-            print(f"  • {c['name']} — 미수강 {c['videoCount']}개")
+            logger.info("  • %s — 미수강 %d개", c["name"], c["videoCount"])
         else:
-            print(f"  • {c['name']} — 수강 완료")
+            logger.info("  • %s — 수강 완료", c["name"])
 
     return courses
 
@@ -61,7 +64,7 @@ async def get_courses(page: Page) -> list[dict]:
 async def get_lectures(page: Page, course_id: str, course_name: str = "") -> list[dict]:
     """과목의 주차학습 페이지에서 강의 목록 반환 (미수강 + 수강완료)"""
     url = f"{BASE_URL}/courses/{course_id}/external_tools/71"
-    print(f"\n[INFO] 주차학습 페이지 로드 중... (course {course_id})")
+    logger.info("주차학습 페이지 로드 중... (course %s)", course_id)
     await page.goto(url, wait_until="networkidle")
     await login_if_needed(page)
     if "external_tools/71" not in page.url:
@@ -75,7 +78,7 @@ async def get_lectures(page: Page, course_id: str, course_name: str = "") -> lis
         if expand_btn:
             await expand_btn.click()
             await asyncio.sleep(2)
-            print("[INFO] 전체 주차 펼침")
+            logger.info("전체 주차 펼침")
     except Exception:
         pass
 
@@ -162,10 +165,12 @@ async def get_lectures(page: Page, course_id: str, course_name: str = "") -> lis
 
     unwatched = [lec for lec in lectures if not lec["isCompleted"]]
     completed = [lec for lec in lectures if lec["isCompleted"]]
-    print(f"[INFO] 강의 {len(lectures)}개 (미수강 {len(unwatched)} / 수강완료 {len(completed)}):")
+    logger.info(
+        "강의 %d개 (미수강 %d / 수강완료 %d)", len(lectures), len(unwatched), len(completed)
+    )
     for lec in lectures:
         m, s = divmod(lec["durationSec"], 60)
         status = "V" if lec["isCompleted"] else " "
-        print(f"  {status} {lec['title']} ({m}:{s:02d})")
+        logger.info("  %s %s (%d:%02d)", status, lec["title"], m, s)
 
     return lectures

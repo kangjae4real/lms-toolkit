@@ -1,7 +1,7 @@
 """영상 다운로드 및 음성-텍스트 전사"""
 
 import asyncio
-import traceback
+import logging
 
 import requests as req_lib
 
@@ -13,6 +13,8 @@ from .config import (
     PROJECT_DIR,
     USER_AGENT,
 )
+
+logger = logging.getLogger(__name__)
 
 
 async def download_and_transcribe(video_url: str, course_name: str, title: str) -> dict:
@@ -48,19 +50,21 @@ async def download_and_transcribe(video_url: str, course_name: str, title: str) 
                         # 50MB마다 중간 보고
                         if total and downloaded - last_report >= DOWNLOAD_REPORT_INTERVAL:
                             pct = downloaded / total * 100
-                            print(
-                                f"  ├ 다운로드: {downloaded // (1024 * 1024)}MB / {total // (1024 * 1024)}MB ({pct:.0f}%)"
+                            logger.info(
+                                "다운로드: %dMB / %dMB (%.0f%%)",
+                                downloaded // (1024 * 1024),
+                                total // (1024 * 1024),
+                                pct,
                             )
                             last_report = downloaded
             return str(mp4_path)
 
-        print("  ├ 다운로드: 시작...")
+        logger.info("다운로드: 시작...")
         result["mp4"] = await loop.run_in_executor(None, _download)
         size_mb = mp4_path.stat().st_size / (1024 * 1024)
-        print(f"  ├ 다운로드: 완료 ({size_mb:.1f}MB)")
-    except Exception as e:
-        print(f"  ├ 다운로드: 실패 — {e}")
-        traceback.print_exc()
+        logger.info("다운로드: 완료 (%.1fMB)", size_mb)
+    except Exception:
+        logger.exception("다운로드 실패")
         return result
 
     # 2. mp4 → wav → txt
@@ -74,26 +78,25 @@ async def download_and_transcribe(video_url: str, course_name: str, title: str) 
 
             wav_path = course_dir / f"{safe_title}.wav"
 
-            print("  ├ 스크립트: [1/3] mp4 → wav 변환 중...")
+            logger.info("스크립트: [1/3] mp4 → wav 변환 중...")
             convert_mp4_to_wav(str(mp4_path), str(wav_path))
 
-            print("  ├ 스크립트: [2/3] Whisper 모델 로딩...")
+            logger.info("스크립트: [2/3] Whisper 모델 로딩...")
             transcriber = WhisperTranscriber()
 
-            print("  ├ 스크립트: [3/3] 음성 → 텍스트 전사 중...")
+            logger.info("스크립트: [3/3] 음성 → 텍스트 전사 중...")
             t_start = time.time()
             transcriber.transcribe(str(wav_path), str(txt_path))
             elapsed = time.time() - t_start
             em, es = divmod(int(elapsed), 60)
-            print(f"  ├ 스크립트: 전사 완료 ({em}분 {es}초)")
+            logger.info("스크립트: 전사 완료 (%d분 %d초)", em, es)
 
             wav_path.unlink(missing_ok=True)
             return str(txt_path)
 
         result["txt"] = await loop.run_in_executor(None, _transcribe)
-        print(f"  └ 스크립트: 저장 완료 → {txt_path.relative_to(PROJECT_DIR)}")
-    except Exception as e:
-        print(f"  └ 스크립트: 전사 실패 — {e}")
-        traceback.print_exc()
+        logger.info("스크립트: 저장 완료 → %s", txt_path.relative_to(PROJECT_DIR))
+    except Exception:
+        logger.exception("전사 실패")
 
     return result
