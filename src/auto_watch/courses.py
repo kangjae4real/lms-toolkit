@@ -86,10 +86,11 @@ async def get_lectures(page: Page, course_id: str, course_name: str = "") -> lis
                 const link = item.querySelector('a.xnmb-module_item-left-title');
                 if (!link) return null;
 
-                // 아이콘 클래스로 항목 타입 판별 (movie / file / assignment 등)
+                // 아이콘 클래스로 항목 타입 판별 (movie/readystream = 동영상)
                 const iconEl = item.querySelector('i.xnmb-module_item-icon');
                 const iconClasses = iconEl ? iconEl.className : '';
-                const itemType = iconClasses.includes('movie') ? 'movie'
+                const isVideo = iconClasses.includes('movie') || iconClasses.includes('readystream');
+                const itemType = isVideo ? 'movie'
                     : iconClasses.includes('file') ? 'file'
                     : iconClasses.includes('assignment') ? 'assignment'
                     : 'other';
