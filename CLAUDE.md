@@ -48,7 +48,7 @@ CHROME_PATH=(선택, Chrome 경로 오버라이드)
 
 ## 규칙
 
-- `src/auto_watch/` 변경 시 영향받는 문서를 같이 업데이트:
+- `src/auto_watch/`, `install.sh`, `run.sh`, `pyproject.toml` 변경 시 영향받는 문서를 같이 업데이트:
   - CLI 출력/흐름 변경 → `README.md` (사용 예시, 사용 흐름)
   - 함수명/구조 변경 → `spec.md` (수정 대상 파일, 함수명 표)
   - 마일스톤 완료 → `spec.md` 체크마크(✅) 갱신
