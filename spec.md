@@ -30,10 +30,9 @@ $ python -m src.auto_watch
 모드를 선택하세요:
   [1] 자동 수강 — 미수강 동영상 재생 + 다운로드/전사
   [2] 다운로드  — 과목 선택 → 강의 다운로드/전사만
-  [3] 동기화    — LMS 현황 → Obsidian vault 업데이트
   [q] 종료
 
-번호 (1/2/3) / q(종료): 1
+번호 (1/2) / q(종료): 1
 ```
 
 **흐름:**
@@ -357,8 +356,9 @@ output/
 
 | 파일 | 주요 함수 | 역할 |
 |------|----------|------|
-| `src/auto_watch/main.py` | `main()`, `_run_watch_mode()`, `_run_download_mode()` | 모드별 흐름 분기, 로그인 재시도 |
-| `src/auto_watch/cli.py` | `select_mode()`, `select_courses()`, `select_lectures()` | 모드/과목/강의 선택 UI |
+| `src/auto_watch/main.py` | `main()`, `_run_watch_mode()`, `_run_download_mode()` | 모드별 흐름 분기, 로그인 재시도, 플러그인 dispatch |
+| `src/auto_watch/cli.py` | `select_mode()`, `select_courses()`, `select_lectures()` | 모드/과목/강의 선택 UI (플러그인 동적 메뉴) |
+| `src/auto_watch/plugin.py` | `discover_plugins()`, `LMSPlugin` | entry_points 기반 플러그인 인프라 |
 | `src/auto_watch/config.py` | `update_credentials()` | 환경변수 + 상수, .env 자격증명 갱신 |
 | `src/auto_watch/courses.py` | `get_courses()`, `get_lectures()` | 과목/강의 수집, movie 타입 필터 |
 | `src/auto_watch/player.py` | `process_lecture()` | `isCompleted` 분기 + 즉시 정지 로직 |
