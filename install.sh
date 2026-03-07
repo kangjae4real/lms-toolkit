@@ -138,36 +138,74 @@ if [ -f ".env" ]; then
 fi
 
 if [ "$CREATE_ENV" = true ]; then
+    # --- 숭실대 (필수) ---
     echo ""
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    echo -e "${BOLD} 숭실대 LMS 로그인 정보 입력${NC}"
+    echo -e "${BOLD} 숭실대 LMS 로그인 정보 (필수)${NC}"
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
     while true; do
-        read -p "  학번: " userid
-        [ -n "$userid" ] && break
+        read -p "  학번: " ssu_userid
+        [ -n "$ssu_userid" ] && break
         echo "  학번을 입력해주세요."
     done
 
     while true; do
-        read -sp "  비밀번호 (화면에 표시되지 않습니다): " password
+        read -sp "  비밀번호 (화면에 표시되지 않습니다): " ssu_password
         echo ""
-        if [ -z "$password" ]; then
+        if [ -z "$ssu_password" ]; then
             echo "  비밀번호를 입력해주세요."
             continue
         fi
-        read -sp "  비밀번호 확인: " password2
+        read -sp "  비밀번호 확인: " ssu_password2
         echo ""
-        if [ "$password" = "$password2" ]; then
+        if [ "$ssu_password" = "$ssu_password2" ]; then
             break
         fi
         echo "  비밀번호가 일치하지 않습니다. 다시 입력해주세요."
     done
 
+    # --- 숭실사이버대 (선택) ---
+    KCU_ENV=""
+    echo ""
+    read -p "  숭실사이버대(KCU)도 사용하시나요? (y/N): " use_kcu
+    if [[ "$use_kcu" == [yY] ]]; then
+        echo ""
+        echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo -e "${BOLD} 숭실사이버대 로그인 정보${NC}"
+        echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+        echo ""
+
+        while true; do
+            read -p "  학번: " kcu_userid
+            [ -n "$kcu_userid" ] && break
+            echo "  학번을 입력해주세요."
+        done
+
+        while true; do
+            read -sp "  비밀번호 (화면에 표시되지 않습니다): " kcu_password
+            echo ""
+            if [ -z "$kcu_password" ]; then
+                echo "  비밀번호를 입력해주세요."
+                continue
+            fi
+            read -sp "  비밀번호 확인: " kcu_password2
+            echo ""
+            if [ "$kcu_password" = "$kcu_password2" ]; then
+                break
+            fi
+            echo "  비밀번호가 일치하지 않습니다. 다시 입력해주세요."
+        done
+
+        KCU_ENV=$'\n'"KCU_USERID=${kcu_userid}"$'\n'"KCU_PASSWORD=${kcu_password}"
+    else
+        echo -e "  ${YELLOW}[참고]${NC} 나중에 .env 파일에 KCU_USERID, KCU_PASSWORD를 추가하면 됩니다."
+    fi
+
     cat > .env << EOF
-USERID=${userid}
-PASSWORD=${password}
+SSU_USERID=${ssu_userid}
+SSU_PASSWORD=${ssu_password}${KCU_ENV}
 EOF
 
     ok ".env 파일 생성 완료"
