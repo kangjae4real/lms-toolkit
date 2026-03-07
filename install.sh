@@ -130,8 +130,8 @@ CREATE_ENV=true
 if [ -f ".env" ]; then
     echo ""
     echo "  .env 파일이 이미 존재합니다."
-    read -p "  덮어쓰시겠습니까? (y/N): " overwrite
-    if [[ "$overwrite" != [yY] ]]; then
+    read -p "  덮어쓰시겠습니까? (y/n): " overwrite
+    if [[ ! "$overwrite" =~ ^[yY] ]]; then
         ok "기존 .env 유지"
         CREATE_ENV=false
     fi
@@ -147,18 +147,21 @@ if [ "$CREATE_ENV" = true ]; then
 
     while true; do
         read -p "  학번: " ssu_userid
+        ssu_userid=$(printf '%s' "$ssu_userid" | tr -cd '[:print:]')
         [ -n "$ssu_userid" ] && break
         echo "  학번을 입력해주세요."
     done
 
     while true; do
         read -sp "  비밀번호 (화면에 표시되지 않습니다): " ssu_password
+        ssu_password=$(printf '%s' "$ssu_password" | tr -cd '[:print:]')
         echo ""
         if [ -z "$ssu_password" ]; then
             echo "  비밀번호를 입력해주세요."
             continue
         fi
         read -sp "  비밀번호 확인: " ssu_password2
+        ssu_password2=$(printf '%s' "$ssu_password2" | tr -cd '[:print:]')
         echo ""
         if [ "$ssu_password" = "$ssu_password2" ]; then
             break
@@ -169,8 +172,8 @@ if [ "$CREATE_ENV" = true ]; then
     # --- 숭실사이버대 (선택) ---
     KCU_ENV=""
     echo ""
-    read -p "  숭실사이버대(KCU)도 사용하시나요? (y/N): " use_kcu
-    if [[ "$use_kcu" == [yY] ]]; then
+    read -p "  숭실사이버대(KCU)도 사용하시나요? (y/n): " use_kcu
+    if [[ "$use_kcu" =~ ^[yY] ]]; then
         echo ""
         echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
         echo -e "${BOLD} 숭실사이버대 로그인 정보${NC}"
@@ -179,18 +182,21 @@ if [ "$CREATE_ENV" = true ]; then
 
         while true; do
             read -p "  학번: " kcu_userid
+            kcu_userid=$(printf '%s' "$kcu_userid" | tr -cd '[:print:]')
             [ -n "$kcu_userid" ] && break
             echo "  학번을 입력해주세요."
         done
 
         while true; do
             read -sp "  비밀번호 (화면에 표시되지 않습니다): " kcu_password
+            kcu_password=$(printf '%s' "$kcu_password" | tr -cd '[:print:]')
             echo ""
             if [ -z "$kcu_password" ]; then
                 echo "  비밀번호를 입력해주세요."
                 continue
             fi
             read -sp "  비밀번호 확인: " kcu_password2
+            kcu_password2=$(printf '%s' "$kcu_password2" | tr -cd '[:print:]')
             echo ""
             if [ "$kcu_password" = "$kcu_password2" ]; then
                 break
