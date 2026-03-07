@@ -434,13 +434,16 @@ class KCUProvider:
 
         return player_frame
 
-    async def _capture_hls_url(self, page: Page, timeout_sec: int = 15) -> str | None:
-        """네트워크 요청에서 HLS m3u8 URL 캡처"""
+    async def _capture_stream_url(self, page: Page, timeout_sec: int = 15) -> str | None:
+        """네트워크 요청에서 스트리밍 URL 캡처 (m3u8/mp4/ts)"""
         captured: dict[str, str | None] = {"url": None}
 
         def on_request(request: Request):
+            if captured["url"] is not None:
+                return
             url = request.url
-            if captured["url"] is None and ".m3u8" in url:
+            # HLS manifest 또는 직접 비디오 파일
+            if ".m3u8" in url or ("/mp4/" in url and ".mp4" in url):
                 captured["url"] = url
 
         page.on("request", on_request)
@@ -453,8 +456,31 @@ class KCUProvider:
         page.remove_listener("request", on_request)
         return captured["url"]
 
+    async def _extract_video_src(self, player_frame: Frame) -> str | None:
+        """플레이어 iframe 내 video 요소에서 직접 소스 URL 추출"""
+        try:
+            src = await player_frame.evaluate("""
+                () => {
+                    const video = document.querySelector('video#video-player')
+                        || document.querySelector('video');
+                    if (!video) return null;
+                    // currentSrc가 가장 정확 (실제 로드된 소스)
+                    if (video.currentSrc) return video.currentSrc;
+                    if (video.src) return video.src;
+                    // <source> 태그 확인
+                    const source = video.querySelector('source');
+                    if (source && source.src) return source.src;
+                    return null;
+                }
+            """)
+            if src and not src.startswith("blob:"):
+                return src
+        except Exception as e:
+            logger.debug("video src 추출 실패: %s", e)
+        return None
+
     async def _start_playback(self, player_frame: Frame) -> None:
-        """플레이어 iframe 내에서 재생 시작"""
+        """플레이어 iframe 내에서 재생 시작 + 2배속 설정"""
         try:
             await player_frame.evaluate("""
                 () => {
@@ -462,12 +488,13 @@ class KCUProvider:
                         || document.querySelector('video');
                     if (video) {
                         video.play();
+                        video.playbackRate = 2;
                         return true;
                     }
                     return false;
                 }
             """)
-            logger.info("재생 시작 (JS video.play)")
+            logger.info("재생 시작 (2x 배속)")
         except Exception:
             # 클릭으로 재생 시도
             try:
@@ -569,7 +596,10 @@ class KCUProvider:
                             () => {
                                 const video = document.querySelector('video#video-player')
                                     || document.querySelector('video');
-                                if (video && video.paused) video.play();
+                                if (video && video.paused) {
+                                    video.play();
+                                    video.playbackRate = 2;
+                                }
                             }
                         """)
 
@@ -600,30 +630,28 @@ class KCUProvider:
         # 1. lectRoom에 POST로 진입
         await self._navigate_to_lect_room(page, lect_meta)
 
-        # 2. HLS URL 캡처를 위한 리스너 등록 + 플레이어 iframe 대기
-        hls_capture_task = asyncio.create_task(self._capture_hls_url(page, timeout_sec=30))
+        # 2. 스트림 URL 캡처를 위한 리스너 등록 + 플레이어 iframe 대기
+        stream_capture_task = asyncio.create_task(
+            self._capture_stream_url(page, timeout_sec=30)
+        )
 
         player_frame = await self._wait_for_player_frame(page)
         if not player_frame:
             logger.error("플레이어 iframe을 찾을 수 없음")
-            hls_capture_task.cancel()
+            stream_capture_task.cancel()
             return {"attended": False, "download_only": False, "mp4": None, "txt": None}
 
         # 3. 재생 시작
         await self._start_playback(player_frame)
         await asyncio.sleep(3)
 
-        # 4. HLS URL 캡처 대기
-        hls_url = await hls_capture_task
+        # 4. 스트림 URL 캡처 대기
+        stream_url = await stream_capture_task
 
-        # HLS URL이 캡처 안됐으면 vdoUrl에서 추출 시도
-        if not hls_url:
-            vdo_url = lect_meta.get("vdoUrl", "")
-            if vdo_url:
-                logger.info("네트워크에서 HLS URL 미감지 — vdoUrl에서 추출 시도")
-                # vdoUrl 페이지에서 m3u8 URL을 직접 추출할 수도 있음
-                # 일단 로그만 남기고 진행
-                logger.info("vdoUrl: %s", vdo_url[:80])
+        # 네트워크에서 못 잡으면 player frame에서 직접 추출
+        if not stream_url:
+            logger.info("네트워크에서 스트림 URL 미감지 — player frame에서 추출 시도")
+            stream_url = await self._extract_video_src(player_frame)
 
         # 수강완료 강의: 즉시 비디오 정지
         if is_completed:
@@ -639,18 +667,23 @@ class KCUProvider:
 
         # 5. 다운로드+전사 시작
         transcript_task = None
-        if hls_url:
-            logger.info("HLS URL 캡처 완료: %s", hls_url[:80])
+        if stream_url:
+            is_hls = ".m3u8" in stream_url
+            logger.info(
+                "%s URL 캡처 완료: %s",
+                "HLS" if is_hls else "MP4",
+                stream_url[:80],
+            )
             transcript_task = asyncio.create_task(
                 download_and_transcribe(
-                    hls_url,
+                    stream_url,
                     course_name,
                     title,
-                    hls=True,
+                    hls=is_hls,
                 )
             )
         else:
-            logger.info("HLS URL 미감지 - 스크립트 추출 건너뜀")
+            logger.info("스트림 URL 미감지 - 스크립트 추출 건너뜀")
 
         # 6. 미수강: 재생 진행 모니터링 (headed 브라우저에서 진도 보고 자동)
         attended = False
