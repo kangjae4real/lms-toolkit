@@ -3,13 +3,26 @@
 import os
 from pathlib import Path
 
-from dotenv import load_dotenv
+from dotenv import load_dotenv, set_key
 
 load_dotenv()
 
 # 인증
 USERID = os.getenv("USERID")
 PASSWORD = os.getenv("PASSWORD")
+
+_ENV_PATH = Path(__file__).parent.parent.parent / ".env"
+
+
+def update_credentials(userid: str, password: str) -> None:
+    """USERID/PASSWORD를 .env 파일에 저장하고 모듈 변수도 갱신"""
+    global USERID, PASSWORD
+    set_key(str(_ENV_PATH), "USERID", userid)
+    set_key(str(_ENV_PATH), "PASSWORD", password)
+    os.environ["USERID"] = userid
+    os.environ["PASSWORD"] = password
+    USERID = userid
+    PASSWORD = password
 
 # LMS URL
 BASE_URL = "https://canvas.ssu.ac.kr"

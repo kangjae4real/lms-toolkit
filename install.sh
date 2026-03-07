@@ -144,9 +144,26 @@ if [ "$CREATE_ENV" = true ]; then
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
-    read -p "  학번: " userid
-    read -sp "  비밀번호 (화면에 표시되지 않습니다): " password
-    echo ""
+    while true; do
+        read -p "  학번: " userid
+        [ -n "$userid" ] && break
+        echo "  학번을 입력해주세요."
+    done
+
+    while true; do
+        read -sp "  비밀번호 (화면에 표시되지 않습니다): " password
+        echo ""
+        if [ -z "$password" ]; then
+            echo "  비밀번호를 입력해주세요."
+            continue
+        fi
+        read -sp "  비밀번호 확인: " password2
+        echo ""
+        if [ "$password" = "$password2" ]; then
+            break
+        fi
+        echo "  비밀번호가 일치하지 않습니다. 다시 입력해주세요."
+    done
 
     cat > .env << EOF
 USERID=${userid}

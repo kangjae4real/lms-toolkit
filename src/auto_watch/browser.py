@@ -5,7 +5,8 @@ import logging
 
 from playwright.async_api import Browser, BrowserContext, Frame, Page
 
-from .config import CHROME_PATH, LOGIN_TIMEOUT_MS, PASSWORD, USER_AGENT, USERID
+from . import config
+from .config import CHROME_PATH, LOGIN_TIMEOUT_MS, USER_AGENT
 from .exceptions import BrowserError, LoginError
 
 logger = logging.getLogger(__name__)
@@ -58,11 +59,11 @@ async def login_if_needed(page: Page) -> None:
     # 기존 값 클리어 후 타이핑
     await page.click("input#userid")
     await page.fill("input#userid", "")
-    await page.type("input#userid", USERID, delay=50)
+    await page.type("input#userid", config.USERID, delay=50)
 
     await page.click("input#pwd")
     await page.fill("input#pwd", "")
-    await page.type("input#pwd", PASSWORD, delay=50)
+    await page.type("input#pwd", config.PASSWORD, delay=50)
 
     await asyncio.sleep(1)
 

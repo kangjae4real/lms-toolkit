@@ -3,6 +3,7 @@
 import argparse
 import asyncio
 import contextlib
+import getpass
 import logging
 import sys
 from datetime import datetime
@@ -11,9 +12,9 @@ from playwright.async_api import Page, async_playwright
 
 from .browser import setup_browser
 from .cli import select_courses, select_lectures, select_mode
-from .config import PASSWORD, USERID
+from .config import PASSWORD, USERID, update_credentials
 from .courses import get_courses, get_items_by_week, get_lectures
-from .exceptions import LMSError
+from .exceptions import LMSError, LoginError
 from .log import setup_logging
 from .player import process_lecture
 from .types import Course
@@ -238,7 +239,25 @@ async def main() -> None:
         page, browser, _context = await setup_browser(p)
 
         try:
-            courses = await get_courses(page)
+            # 로그인 재시도 루프 (최대 3회)
+            courses = None
+            for attempt in range(3):
+                try:
+                    courses = await get_courses(page)
+                    break
+                except LoginError:
+                    if attempt == 2:
+                        logger.error("로그인 3회 실패. 종료합니다.")
+                        sys.exit(1)
+                    retry = input("\n학번/비밀번호를 다시 입력하시겠습니까? (Y/n): ").strip()
+                    if retry.lower() == "n":
+                        sys.exit(1)
+                    userid = input("학번: ").strip()
+                    pwd = getpass.getpass("비밀번호: ")
+                    update_credentials(userid, pwd)
+                    await page.goto("about:blank")
+                    logger.info("다시 로그인 시도 중...")
+
             if not courses:
                 return
 
