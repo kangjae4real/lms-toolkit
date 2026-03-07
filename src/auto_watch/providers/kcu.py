@@ -52,25 +52,33 @@ class KCUProvider:
         """KCU 포탈 로그인 → LMS 대시보드 진입"""
         logger.info("KCU 포탈 로그인 시도...")
 
-        # domcontentloaded로 빠르게 로드 후 즉시 학번 탭 클릭
-        # (networkidle까지 기다리면 기본 탭(인증서)의 JS가 팝업을 열어버림)
-        await page.goto(_PORTAL_LOGIN_URL, wait_until="domcontentloaded")
-        await asyncio.sleep(1)
+        try:
+            # domcontentloaded로 빠르게 로드 후 즉시 학번 탭 클릭
+            # (networkidle까지 기다리면 기본 탭(인증서)의 JS가 팝업을 열어버림)
+            await page.goto(_PORTAL_LOGIN_URL, wait_until="domcontentloaded")
+            await asyncio.sleep(2)
 
-        # "학번" 탭 클릭 — 인증서 팝업 뜨기 전에 전환
-        await page.get_by_role("link", name="학번 로그인 학번").click()
-        await asyncio.sleep(1)
-        logger.info("학번 탭 클릭 완료")
+            # 데스크톱: 모든 로그인 방식이 컬럼으로 동시에 보임
+            # 모바일: 탭 UI로 전환됨
+            # → "학번 로그인" 그룹으로 스코프를 좁혀서 입력
+            login_section = page.get_by_role("group", name="학번 로그인")
+            await login_section.wait_for(state="visible", timeout=10000)
+            logger.info("학번 로그인 섹션 감지")
 
-        # 학번/비밀번호 입력 (placeholder 기반 셀렉터 — 실제 DOM 확인됨)
-        userid, password = self.get_credentials()
+            userid, password = self.get_credentials()
 
-        await page.get_by_placeholder("학번").fill(userid)
-        await page.get_by_placeholder("비밀번호").fill(password)
-        await asyncio.sleep(1)
+            await login_section.get_by_placeholder("학번").fill(userid)
+            await login_section.get_by_placeholder("비밀번호").fill(password)
+            await asyncio.sleep(1)
+            logger.info("학번/비밀번호 입력 완료")
 
-        # 로그인 버튼 클릭
-        await page.get_by_role("button", name="학번 로그인").click()
+            # 로그인 버튼 클릭
+            await login_section.get_by_role("button", name="학번 로그인").click()
+            logger.info("로그인 버튼 클릭 완료")
+        except LoginError:
+            raise
+        except Exception as e:
+            raise LoginError(f"KCU 로그인 중 오류: {e}") from e
 
         # 대시보드 리디렉션 대기
         for i in range(20):
@@ -203,6 +211,42 @@ class KCUProvider:
         logger.info("profId(empno): %s", prof_id or "(미확인)")
         return prof_id
 
+    async def _get_available_weeks(self, page: Page) -> list[int]:
+        """lectRoom 주차목록에서 수강 가능한 주차 번호만 반환.
+
+        주차 사이드바에서 "강의 시작전"이 아닌 주차만 포함.
+        """
+        weeks = await page.evaluate("""
+            () => {
+                const result = [];
+                // 주차목록 항목: 각 주차 블록에 주차번호와 상태 텍스트가 있음
+                const weekItems = document.querySelectorAll(
+                    '.weekList li, .week-list li, [class*="weekList"] li, '
+                    + '[class*="week"] > li, .lnb_cont li'
+                );
+                for (const li of weekItems) {
+                    const text = li.textContent || '';
+                    // "N주." 패턴에서 주차 번호 추출
+                    const weekMatch = text.match(/(\\d+)주/);
+                    if (!weekMatch) continue;
+                    const weekNo = parseInt(weekMatch[1]);
+                    // "강의 시작전"이 포함되어 있으면 미개설
+                    if (text.includes('강의 시작전') || text.includes('강의시작전')) {
+                        continue;
+                    }
+                    result.push(weekNo);
+                }
+                return result;
+            }
+        """)
+
+        if weeks:
+            logger.info("수강 가능 주차: %s", weeks)
+        else:
+            logger.warning("주차 목록 파싱 실패 — 전체 주차 시도")
+
+        return weeks
+
     async def get_lectures(
         self, page: Page, course_id: str, course_name: str = ""
     ) -> list[Lecture]:
@@ -215,10 +259,14 @@ class KCUProvider:
         # 1. lectRoom 진입 → profId 확보
         prof_id = await self._enter_lect_room(page, course_meta)
 
-        # 2. 주차별 강의 정보 API 호출
+        # 2. 수강 가능한 주차만 파싱
+        available_weeks = await self._get_available_weeks(page)
+        target_weeks = available_weeks if available_weeks else range(1, _MAX_WEEKS + 1)
+
+        # 3. 주차별 강의 정보 API 호출
         lectures: list[Lecture] = []
 
-        for week_no in range(1, _MAX_WEEKS + 1):
+        for week_no in target_weeks:
             week_str = f"{week_no:02d}"
             params = {
                 "shyr": course_meta["shyr"],
@@ -265,10 +313,10 @@ class KCUProvider:
                 week_cnt = item.get("wkendCnt", week_no)
                 lect_no = item.get("lectNo", 1)
                 lect_title = item.get("lectTtlNm", "-")
-                if lect_title == "-":
-                    lect_title = f"{course_name}"
-
-                title = f"{week_cnt}주 {lect_no}강 {lect_title}"
+                if lect_title in ("-", ""):
+                    title = f"{week_cnt}주 {lect_no}강"
+                else:
+                    title = f"{week_cnt}주 {lect_no}강 {lect_title}"
 
                 rtprgs = int(item.get("rtprgsRpblty", "0"))
                 is_completed = rtprgs >= 99
