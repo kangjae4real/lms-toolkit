@@ -5,29 +5,41 @@ from collections import OrderedDict
 from datetime import datetime
 
 
-def select_mode() -> str:
-    """시작 시 모드 선택. 'watch', 'download', 'sync', 또는 'quit' 반환."""
+def select_mode(plugins=None) -> str:
+    """시작 시 모드 선택. 내장 모드 + 플러그인 모드를 동적으로 표시."""
+    builtin = [
+        ("watch", "자동 수강 — 미수강 동영상 재생 + 다운로드/전사"),
+        ("download", "다운로드  — 과목 선택 → 강의 다운로드/전사만"),
+    ]
+
+    menu_items = []  # (key, mode_id, label)
+    for i, (mode_id, label) in enumerate(builtin, 1):
+        menu_items.append((str(i), mode_id, label))
+
+    if plugins:
+        for plugin in plugins:
+            idx = len(menu_items) + 1
+            menu_items.append((str(idx), plugin.name, plugin.menu_entry.label))
+
     print("\n모드를 선택하세요:")
-    print("  [1] 자동 수강 — 미수강 동영상 재생 + 다운로드/전사")
-    print("  [2] 다운로드  — 과목 선택 → 강의 다운로드/전사만")
-    print("  [3] 동기화    — LMS 현황 → Obsidian vault 업데이트")
+    for key, _, label in menu_items:
+        print(f"  [{key}] {label}")
     print("  [q] 종료")
+
+    key_to_mode = {key: mode_id for key, mode_id, _ in menu_items}
+    valid_keys = "/".join(k for k, _, _ in menu_items)
 
     while True:
         try:
-            choice = input("\n번호 (1/2/3) / q(종료): ").strip().lower()
+            choice = input(f"\n번호 ({valid_keys}) / q(종료): ").strip().lower()
         except EOFError:
             return "quit"
 
-        if choice == "1":
-            return "watch"
-        if choice == "2":
-            return "download"
-        if choice == "3":
-            return "sync"
+        if choice in key_to_mode:
+            return key_to_mode[choice]
         if choice == "q":
             return "quit"
-        print("  1, 2, 3, 또는 q를 입력하세요.")
+        print(f"  {valid_keys}, 또는 q를 입력하세요.")
 
 
 def select_courses(courses: list[dict]) -> list[dict]:
