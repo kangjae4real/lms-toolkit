@@ -13,10 +13,11 @@ from playwright.async_api import Page, async_playwright
 from .browser import setup_browser
 from .cli import select_courses, select_lectures, select_mode
 from .config import PASSWORD, USERID, update_credentials
-from .courses import get_courses, get_items_by_week, get_lectures
+from .courses import get_courses, get_lectures
 from .exceptions import LMSError, LoginError
 from .log import setup_logging
 from .player import process_lecture
+from .plugin import discover_plugins
 from .types import Course
 
 logger = logging.getLogger(__name__)
@@ -130,56 +131,11 @@ async def _run_download_mode(page: Page, courses: list[Course]) -> str | None:
         break
 
 
-async def _run_sync_mode(page: Page, courses: list[Course]) -> None:
-    """동기화 모드: LMS 현황을 수집하여 출력 (Phase 1 — 데이터 수집만)"""
-    logger.info("[sync] %d개 과목 현황 수집 시작", len(courses))
-
-    for course in courses:
-        status = await get_items_by_week(page, course["courseId"], course["name"])
-        weeks = status["weeks"]
-
-        print(f"\n{'─' * 50}")
-        print(f"  {status['courseName']} (course {status['courseId']})")
-        print(f"{'─' * 50}")
-
-        for wn in sorted(weeks.keys()):
-            items = weeks[wn]
-            week_label = f"{wn}주차" if wn > 0 else "기타"
-            completed = sum(1 for it in items if it["isCompleted"])
-            print(f"\n  {week_label} ({completed}/{len(items)} 완료)")
-
-            for item in items:
-                m, s = divmod(item["durationSec"], 60)
-                check = "✅" if item["isCompleted"] else "  "
-                duration = f" ({m}:{s:02d})" if item["durationSec"] > 0 else ""
-                deadline_str = ""
-                if item["deadline"]:
-                    dl = datetime.fromisoformat(
-                        item["deadline"].replace("Z", "+00:00")
-                    ).strftime("%m/%d")
-                    deadline_str = f" 마감 {dl}"
-                print(
-                    f"    {check} [{item['itemType']:10s}] "
-                    f"{item['title']}{duration}{deadline_str}"
-                )
-
-    print(f"\n{'═' * 50}")
-    print("  [sync] 데이터 수집 완료 (vault 동기화는 Phase 2에서 구현)")
-    print(f"{'═' * 50}")
-
-
-def _parse_args() -> argparse.Namespace:
+def _parse_args(plugins=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="숭실대 LMS 자동 수강 시스템")
-    parser.add_argument(
-        "--sync",
-        action="store_true",
-        help="LMS 현황 → Obsidian vault 동기화 (비대화형, headless)",
-    )
-    parser.add_argument(
-        "--init-mapping",
-        action="store_true",
-        help="과목 매핑 초기화 (LMS ↔ vault 폴더)",
-    )
+    if plugins:
+        for plugin in plugins:
+            plugin.add_arguments(parser)
     return parser.parse_args()
 
 
@@ -191,42 +147,33 @@ def cli_entry() -> None:
 
 async def main() -> None:
     setup_logging()
-    args = _parse_args()
+    plugins = discover_plugins()
+    args = _parse_args(plugins)
 
     if not USERID or not PASSWORD:
         logger.error(".env에 USERID와 PASSWORD를 설정하세요")
         sys.exit(1)
 
-    # --sync: 비대화형 headless 동기화
-    if args.sync:
-        print("=" * 60)
-        print("  숭실대 LMS → Obsidian 동기화")
-        print(f"  시작: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("=" * 60)
-
+    # 플러그인 CLI 플래그 처리 (예: --sync)
+    active_plugin = next((p for p in plugins if p.should_handle(args)), None)
+    if active_plugin:
         async with async_playwright() as p:
-            # headless 시도, 실패 시 headed fallback
             try:
                 page, browser, _context = await setup_browser(p, headless=True)
             except Exception:
-                logger.warning("[sync] headless 실패, headed로 재시도")
+                logger.warning("headless 실패, headed로 재시도")
                 page, browser, _context = await setup_browser(p, headless=False)
 
             try:
                 courses = await get_courses(page)
                 if not courses:
                     return
-                await _run_sync_mode(page, courses)
+                await active_plugin.run(page, courses)
             except LMSError as e:
                 logger.error("%s", e)
                 sys.exit(1)
             finally:
                 await browser.close()
-        return
-
-    # --init-mapping: 과목 매핑 초기화 (Phase 2에서 구현)
-    if args.init_mapping:
-        print("[TODO] 과목 매핑 초기화는 Phase 2에서 구현")
         return
 
     # 대화형 모드
@@ -266,8 +213,10 @@ async def main() -> None:
             if not courses:
                 return
 
+            plugin_map = {pl.name: pl for pl in plugins}
+
             while True:
-                mode = select_mode()
+                mode = select_mode(plugins)
 
                 if mode == "quit":
                     break
@@ -275,9 +224,8 @@ async def main() -> None:
                     result = await _run_watch_mode(page, courses)
                 elif mode == "download":
                     result = await _run_download_mode(page, courses)
-                elif mode == "sync":
-                    await _run_sync_mode(page, courses)
-                    result = None
+                elif mode in plugin_map:
+                    result = await plugin_map[mode].run(page, courses)
                 else:
                     result = None
 
