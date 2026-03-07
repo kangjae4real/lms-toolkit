@@ -11,19 +11,18 @@ from datetime import datetime
 from playwright.async_api import Page, async_playwright
 
 from .browser import setup_browser
-from .cli import select_courses, select_lectures, select_mode
-from .config import PASSWORD, USERID, update_credentials
-from .courses import get_courses, get_lectures
+from .cli import select_courses, select_lectures, select_mode, select_school
+from .config import SCHOOL_CONFIGS, update_credentials
 from .exceptions import LMSError, LoginError
 from .log import setup_logging
-from .player import process_lecture
 from .plugin import discover_plugins
+from .provider import LMSProvider, get_provider
 from .types import Course
 
 logger = logging.getLogger(__name__)
 
 
-async def _run_watch_mode(page: Page, courses: list[Course]) -> str | None:
+async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvider) -> str | None:
     """자동 수강 모드: 미수강 동영상만 재생 + 다운로드/전사"""
     target_courses = [c for c in courses if c["videoCount"] > 0]
 
@@ -33,7 +32,7 @@ async def _run_watch_mode(page: Page, courses: list[Course]) -> str | None:
 
     all_lectures = []
     for course in target_courses:
-        lectures = await get_lectures(page, course["courseId"], course["name"])
+        lectures = await provider.get_lectures(page, course["courseId"], course["name"])
         all_lectures.extend(lectures)
 
     if not all_lectures:
@@ -58,7 +57,7 @@ async def _run_watch_mode(page: Page, courses: list[Course]) -> str | None:
 
     for i, lecture in enumerate(selected, 1):
         print(f"\n[{i}/{len(selected)}]", end=" ")
-        result = await process_lecture(page, lecture)
+        result = await provider.process_lecture(page, lecture)
         if result.get("download_only"):
             download_only += 1
         elif result["attended"]:
@@ -82,7 +81,9 @@ async def _run_watch_mode(page: Page, courses: list[Course]) -> str | None:
     print(f"{'═' * 40}")
 
 
-async def _run_download_mode(page: Page, courses: list[Course]) -> str | None:
+async def _run_download_mode(
+    page: Page, courses: list[Course], provider: LMSProvider
+) -> str | None:
     """다운로드 모드: 과목 선택 → 강의 선택 → 다운로드/전사만"""
     while True:
         selected_courses = select_courses(courses)
@@ -94,7 +95,7 @@ async def _run_download_mode(page: Page, courses: list[Course]) -> str | None:
 
         all_lectures = []
         for course in selected_courses:
-            lectures = await get_lectures(page, course["courseId"], course["name"])
+            lectures = await provider.get_lectures(page, course["courseId"], course["name"])
             all_lectures.extend(lectures)
 
         if not all_lectures:
@@ -117,7 +118,7 @@ async def _run_download_mode(page: Page, courses: list[Course]) -> str | None:
         for i, lecture in enumerate(selected, 1):
             print(f"\n[{i}/{len(selected)}]", end=" ")
             lecture["isCompleted"] = True
-            result = await process_lecture(page, lecture)
+            result = await provider.process_lecture(page, lecture)
             if result.get("txt"):
                 transcribed += 1
             await asyncio.sleep(3)
@@ -132,7 +133,7 @@ async def _run_download_mode(page: Page, courses: list[Course]) -> str | None:
 
 
 def _parse_args(plugins=None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="숭실대 LMS 자동 수강 시스템")
+    parser = argparse.ArgumentParser(description="LMS 자동 수강 시스템")
     if plugins:
         for plugin in plugins:
             plugin.add_arguments(parser)
@@ -150,8 +151,14 @@ async def main() -> None:
     plugins = discover_plugins()
     args = _parse_args(plugins)
 
-    if not USERID or not PASSWORD:
-        logger.error(".env에 USERID와 PASSWORD를 설정하세요")
+    # 학교 선택 + Provider 생성
+    school = select_school()
+    provider = get_provider(school)
+    school_config = SCHOOL_CONFIGS[school]
+
+    if not school_config.userid or not school_config.password:
+        env_prefix = school.upper()
+        logger.error(".env에 %s_USERID와 %s_PASSWORD를 설정하세요", env_prefix, env_prefix)
         sys.exit(1)
 
     # 플러그인 CLI 플래그 처리 (예: --sync)
@@ -165,7 +172,8 @@ async def main() -> None:
                 page, browser, _context = await setup_browser(p, headless=False)
 
             try:
-                courses = await get_courses(page)
+                await provider.login(page)
+                courses = await provider.get_courses(page)
                 if not courses:
                     return
                 await active_plugin.run(page, courses)
@@ -178,7 +186,7 @@ async def main() -> None:
 
     # 대화형 모드
     print("=" * 60)
-    print("  숭실대 LMS 자동 수강 시스템")
+    print(f"  {provider.display_name} LMS 자동 수강 시스템")
     print(f"  시작: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print("  종료: q 또는 Ctrl+C")
     print("=" * 60)
@@ -191,7 +199,8 @@ async def main() -> None:
             courses = None
             for attempt in range(3):
                 try:
-                    courses = await get_courses(page)
+                    await provider.login(page)
+                    courses = await provider.get_courses(page)
                     break
                 except LoginError:
                     if attempt == 2:
@@ -206,7 +215,7 @@ async def main() -> None:
                     pwd = getpass.getpass("비밀번호 (빈 입력=종료): ")
                     if not pwd:
                         sys.exit(0)
-                    update_credentials(userid, pwd)
+                    update_credentials(school, userid, pwd)
                     await page.goto("about:blank")
                     logger.info("다시 로그인 시도 중...")
 
@@ -221,9 +230,9 @@ async def main() -> None:
                 if mode == "quit":
                     break
                 elif mode == "watch":
-                    result = await _run_watch_mode(page, courses)
+                    result = await _run_watch_mode(page, courses, provider)
                 elif mode == "download":
-                    result = await _run_download_mode(page, courses)
+                    result = await _run_download_mode(page, courses, provider)
                 elif mode in plugin_map:
                     result = await plugin_map[mode].run(page, courses)
                 else:

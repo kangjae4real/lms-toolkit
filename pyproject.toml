@@ -51,8 +51,8 @@ select = [
 [tool.ruff.lint.per-file-ignores]
 # JS evaluate 문자열 내부 긴 줄 허용
 "src/auto_watch/browser.py" = ["E501"]
-"src/auto_watch/courses.py" = ["E501"]
-"src/auto_watch/player.py" = ["E501"]
+"src/auto_watch/providers/ssu.py" = ["E501"]
+"src/auto_watch/providers/kcu.py" = ["E501"]
 "src/auto_watch/transcription.py" = ["E501"]
 
 [tool.ruff.lint.isort]

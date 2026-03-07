@@ -18,10 +18,69 @@ from .types import TranscriptResult
 logger = logging.getLogger(__name__)
 
 
-async def download_and_transcribe(video_url: str, course_name: str, title: str) -> TranscriptResult:
+def _download_mp4(video_url: str, mp4_path, referer: str) -> str:
+    """HTTP 직접 다운로드 (MP4)"""
+    headers = {
+        "User-Agent": USER_AGENT,
+        "Referer": referer,
+    }
+    resp = req_lib.get(video_url, stream=True, headers=headers)
+    resp.raise_for_status()
+    total = int(resp.headers.get("Content-Length", 0))
+    downloaded = 0
+    last_report = 0
+    with open(mp4_path, "wb") as f:
+        for chunk in resp.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
+            if chunk:
+                f.write(chunk)
+                downloaded += len(chunk)
+                if total and downloaded - last_report >= DOWNLOAD_REPORT_INTERVAL:
+                    pct = downloaded / total * 100
+                    logger.info(
+                        "다운로드: %dMB / %dMB (%.0f%%)",
+                        downloaded // (1024 * 1024),
+                        total // (1024 * 1024),
+                        pct,
+                    )
+                    last_report = downloaded
+    return str(mp4_path)
+
+
+async def _download_hls(video_url: str, mp4_path) -> str:
+    """ffmpeg로 HLS(m3u8) → MP4 변환"""
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        video_url,
+        "-c",
+        "copy",
+        "-bsf:a",
+        "aac_adtstoasc",
+        str(mp4_path),
+    ]
+    proc = await asyncio.create_subprocess_exec(
+        *cmd,
+        stdout=asyncio.subprocess.PIPE,
+        stderr=asyncio.subprocess.PIPE,
+    )
+    _, stderr = await proc.communicate()
+    if proc.returncode != 0:
+        raise RuntimeError(f"ffmpeg 실패: {stderr.decode()[-500:]}")
+    return str(mp4_path)
+
+
+async def download_and_transcribe(
+    video_url: str,
+    course_name: str,
+    title: str,
+    *,
+    referer: str = "",
+    hls: bool = False,
+) -> TranscriptResult:
     """영상 다운로드 + 음성→텍스트 전사 (재생과 병렬 실행)"""
     loop = asyncio.get_running_loop()
-    result = {"mp4": None, "txt": None}
+    result: TranscriptResult = {"mp4": None, "txt": None}
 
     course_dir = OUTPUT_DIR / _safe_filename(course_name)
     course_dir.mkdir(parents=True, exist_ok=True)
@@ -32,36 +91,13 @@ async def download_and_transcribe(video_url: str, course_name: str, title: str) 
 
     # 1. 다운로드
     try:
-
-        def _download():
-            headers = {
-                "User-Agent": USER_AGENT,
-                "Referer": "https://commons.ssu.ac.kr/",
-            }
-            resp = req_lib.get(video_url, stream=True, headers=headers)
-            resp.raise_for_status()
-            total = int(resp.headers.get("Content-Length", 0))
-            downloaded = 0
-            last_report = 0
-            with open(mp4_path, "wb") as f:
-                for chunk in resp.iter_content(chunk_size=DOWNLOAD_CHUNK_SIZE):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        # 50MB마다 중간 보고
-                        if total and downloaded - last_report >= DOWNLOAD_REPORT_INTERVAL:
-                            pct = downloaded / total * 100
-                            logger.info(
-                                "다운로드: %dMB / %dMB (%.0f%%)",
-                                downloaded // (1024 * 1024),
-                                total // (1024 * 1024),
-                                pct,
-                            )
-                            last_report = downloaded
-            return str(mp4_path)
-
         logger.info("다운로드: 시작...")
-        result["mp4"] = await loop.run_in_executor(None, _download)
+        if hls:
+            result["mp4"] = await _download_hls(video_url, mp4_path)
+        else:
+            result["mp4"] = await loop.run_in_executor(
+                None, _download_mp4, video_url, mp4_path, referer
+            )
         size_mb = mp4_path.stat().st_size / (1024 * 1024)
         logger.info("다운로드: 완료 (%.1fMB)", size_mb)
     except Exception:

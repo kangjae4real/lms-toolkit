@@ -1,32 +1,60 @@
 """설정 상수 및 환경변수 로딩"""
 
 import os
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from dotenv import load_dotenv, set_key
 
 load_dotenv()
 
-# 인증
-USERID = os.getenv("USERID")
-PASSWORD = os.getenv("PASSWORD")
+
+@dataclass
+class SchoolConfig:
+    name: str
+    display_name: str
+    base_url: str
+    userid: str | None = field(default=None, repr=False)
+    password: str | None = field(default=None, repr=False)
+
+
+# 학교별 인증 (기존 USERID/PASSWORD는 SSU 폴백 = 하위호환)
+SSU_USERID = os.getenv("SSU_USERID") or os.getenv("USERID")
+SSU_PASSWORD = os.getenv("SSU_PASSWORD") or os.getenv("PASSWORD")
+KCU_USERID = os.getenv("KCU_USERID")
+KCU_PASSWORD = os.getenv("KCU_PASSWORD")
+
+SCHOOL_CONFIGS: dict[str, SchoolConfig] = {
+    "ssu": SchoolConfig(
+        name="ssu",
+        display_name="숭실대",
+        base_url="https://canvas.ssu.ac.kr",
+        userid=SSU_USERID,
+        password=SSU_PASSWORD,
+    ),
+    "kcu": SchoolConfig(
+        name="kcu",
+        display_name="숭실사이버대",
+        base_url="https://lms.kcu.ac",
+        userid=KCU_USERID,
+        password=KCU_PASSWORD,
+    ),
+}
 
 _ENV_PATH = Path(__file__).parent.parent.parent / ".env"
 
 
-def update_credentials(userid: str, password: str) -> None:
-    """USERID/PASSWORD를 .env 파일에 저장하고 모듈 변수도 갱신"""
-    global USERID, PASSWORD
-    set_key(str(_ENV_PATH), "USERID", userid)
-    set_key(str(_ENV_PATH), "PASSWORD", password)
-    os.environ["USERID"] = userid
-    os.environ["PASSWORD"] = password
-    USERID = userid
-    PASSWORD = password
+def update_credentials(school: str, userid: str, password: str) -> None:
+    """학교별 USERID/PASSWORD를 .env 파일에 저장하고 설정도 갱신"""
+    prefix = school.upper()
+    set_key(str(_ENV_PATH), f"{prefix}_USERID", userid)
+    set_key(str(_ENV_PATH), f"{prefix}_PASSWORD", password)
 
-# LMS URL
-BASE_URL = "https://canvas.ssu.ac.kr"
-MYPAGE_URL = f"{BASE_URL}/accounts/1/external_tools/67?launch_type=global_navigation"
+    config = SCHOOL_CONFIGS.get(school)
+    if config:
+        config.userid = userid
+        config.password = password
+
 
 # 파일 경로
 PROJECT_DIR = Path(__file__).parent.parent.parent
