@@ -185,7 +185,7 @@ echo "  실행 방법:"
 echo "    ./run.sh"
 echo ""
 echo "  또는 uv를 직접 사용:"
-echo "    uv run lms"
+echo "    uv run lms-toolkit"
 if [ "${UV_INSTALLED:-}" = true ]; then
     echo ""
     echo -e "  ${YELLOW}[참고]${NC} uv를 새로 설치했으므로, uv 명령어를 쓰려면"

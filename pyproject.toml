@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-lms = "src.auto_watch.main:cli_entry"
+lms-toolkit = "src.auto_watch.main:cli_entry"
 
 [project.optional-dependencies]
 dev = [

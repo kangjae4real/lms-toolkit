@@ -8,7 +8,7 @@
 
 ```bash
 ./run.sh                          # 가장 간단
-uv run lms                        # project.scripts 엔트리포인트
+uv run lms-toolkit                # project.scripts 엔트리포인트
 uv run python -m src.auto_watch   # 모듈 직접 실행
 ```
 

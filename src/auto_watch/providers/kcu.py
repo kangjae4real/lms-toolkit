@@ -8,7 +8,6 @@ from playwright.async_api import Frame, Page, Request
 
 from ..config import (
     IFRAME_TIMEOUT_MS,
-    LOGIN_TIMEOUT_MS,
     PLAYBACK_COMPLETION_THRESHOLD,
     PLAYBACK_LOG_INTERVAL_SEC,
     PLAYBACK_TIMEOUT_BUFFER_SEC,
@@ -52,81 +51,26 @@ class KCUProvider:
     async def login(self, page: Page) -> None:
         """KCU 포탈 로그인 → LMS 대시보드 진입"""
         logger.info("KCU 포탈 로그인 시도...")
-        await page.goto(_PORTAL_LOGIN_URL, wait_until="networkidle")
 
-        # "학번" 탭 클릭
-        try:
-            tab_links = await page.query_selector_all("a")
-            for link in tab_links:
-                text = await link.inner_text()
-                if "학번" in text:
-                    await link.click()
-                    await asyncio.sleep(1)
-                    break
-        except Exception as e:
-            logger.warning("학번 탭 클릭 실패 (무시하고 진행): %s", e)
+        # domcontentloaded로 빠르게 로드 후 즉시 학번 탭 클릭
+        # (networkidle까지 기다리면 기본 탭(인증서)의 JS가 팝업을 열어버림)
+        await page.goto(_PORTAL_LOGIN_URL, wait_until="domcontentloaded")
+        await asyncio.sleep(1)
 
-        # 학번/비밀번호 입력
-        await page.wait_for_selector("input#userId", timeout=LOGIN_TIMEOUT_MS)
+        # "학번" 탭 클릭 — 인증서 팝업 뜨기 전에 전환
+        await page.get_by_role("link", name="학번 로그인 학번").click()
+        await asyncio.sleep(1)
+        logger.info("학번 탭 클릭 완료")
 
+        # 학번/비밀번호 입력 (placeholder 기반 셀렉터 — 실제 DOM 확인됨)
         userid, password = self.get_credentials()
 
-        await page.fill("input#userId", "")
-        await page.type("input#userId", userid, delay=50)
-
-        # 비밀번호 필드 — 특이한 구조이므로 여러 셀렉터 시도
-        pw_filled = False
-        for pw_selector in ["input#userPw", 'input[placeholder="비밀번호"]']:
-            try:
-                pw_input = await page.query_selector(pw_selector)
-                if pw_input:
-                    await pw_input.click()
-                    await pw_input.fill("")
-                    await pw_input.type(password, delay=50)
-                    pw_filled = True
-                    break
-            except Exception:
-                continue
-
-        if not pw_filled:
-            raise LoginError("비밀번호 입력 필드를 찾을 수 없습니다")
-
+        await page.get_by_placeholder("학번").fill(userid)
+        await page.get_by_placeholder("비밀번호").fill(password)
         await asyncio.sleep(1)
 
         # 로그인 버튼 클릭
-        login_clicked = False
-        try:
-            login_btn = await page.query_selector("button.btnMoveLectRoom")
-            if login_btn:
-                await login_btn.click()
-                login_clicked = True
-        except Exception:
-            pass
-
-        if not login_clicked:
-            # 텍스트로 버튼 찾기
-            try:
-                buttons = await page.query_selector_all("button")
-                for btn in buttons:
-                    text = await btn.inner_text()
-                    if "학번 로그인" in text or "로그인" in text:
-                        await btn.click()
-                        login_clicked = True
-                        break
-            except Exception:
-                pass
-
-        if not login_clicked:
-            # JS로 폼 제출 시도
-            await page.evaluate("""
-                () => {
-                    const btn = document.querySelector('button.btnMoveLectRoom')
-                        || document.querySelector('button[type="submit"]');
-                    if (btn) { btn.click(); return; }
-                    const form = document.querySelector('form');
-                    if (form) form.submit();
-                }
-            """)
+        await page.get_by_role("button", name="학번 로그인").click()
 
         # 대시보드 리디렉션 대기
         for i in range(20):
