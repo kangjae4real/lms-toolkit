@@ -57,16 +57,18 @@ async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvid
 
     for i, lecture in enumerate(selected, 1):
         print(f"\n[{i}/{len(selected)}]", end=" ")
-        result = await provider.process_lecture(page, lecture)
+        result = await provider.process_lecture(page, lecture, defer_transcript=True)
         if result.get("download_only"):
             download_only += 1
         elif result["attended"]:
             watch_completed += 1
         else:
             watch_failed += 1
-        if result.get("txt"):
-            transcribed += 1
         await asyncio.sleep(3)
+
+    # 백그라운드 다운로드/전사 완료 대기
+    transcript_results = await provider.drain_tasks()
+    transcribed = sum(1 for r in transcript_results if r.get("txt"))
 
     print(f"\n{'═' * 40}")
     print("  완료!")
@@ -113,15 +115,17 @@ async def _run_download_mode(
         sel_m, sel_s = divmod(sel_total, 60)
         logger.info("%d개 선택, 총 %d:%02d", len(selected), sel_m, sel_s)
 
-        transcribed = 0
-
         for i, lecture in enumerate(selected, 1):
             print(f"\n[{i}/{len(selected)}]", end=" ")
             lecture["isCompleted"] = True
-            result = await provider.process_lecture(page, lecture)
-            if result.get("txt"):
-                transcribed += 1
+            await provider.process_lecture(page, lecture, defer_transcript=True)
             await asyncio.sleep(3)
+
+        # 백그라운드 다운로드/전사 완료 대기
+        print()
+        logger.info("다운로드/전사 완료 대기 중...")
+        transcript_results = await provider.drain_tasks()
+        transcribed = sum(1 for r in transcript_results if r.get("txt"))
 
         print(f"\n{'═' * 40}")
         print("  완료!")

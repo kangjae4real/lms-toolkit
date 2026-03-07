@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from playwright.async_api import Page
 
-    from .types import Course, Lecture, ProcessResult
+    from .types import Course, Lecture, ProcessResult, TranscriptResult
 
 
 class LMSProvider(Protocol):
@@ -27,7 +27,11 @@ class LMSProvider(Protocol):
 
     async def get_lectures(self, page: Page, course_id: str, course_name: str) -> list[Lecture]: ...
 
-    async def process_lecture(self, page: Page, lecture: Lecture) -> ProcessResult: ...
+    async def process_lecture(
+        self, page: Page, lecture: Lecture, *, defer_transcript: bool = False
+    ) -> ProcessResult: ...
+
+    async def drain_tasks(self) -> list[TranscriptResult]: ...
 
 
 def get_provider(school: str) -> LMSProvider:

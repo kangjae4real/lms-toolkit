@@ -15,7 +15,7 @@ from ..config import (
 )
 from ..exceptions import LoginError
 from ..transcription import download_and_transcribe
-from ..types import Course, Lecture, ProcessResult
+from ..types import Course, Lecture, ProcessResult, TranscriptResult
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +34,7 @@ class KCUProvider:
     def __init__(self, config: SchoolConfig):
         self._config = config
         self._base_url = config.base_url
+        self._pending_tasks: list[asyncio.Task] = []
 
     @property
     def name(self) -> str:
@@ -615,7 +616,9 @@ class KCUProvider:
 
             await asyncio.sleep(5)
 
-    async def process_lecture(self, page: Page, lecture: Lecture) -> ProcessResult:
+    async def process_lecture(
+        self, page: Page, lecture: Lecture, *, defer_transcript: bool = False
+    ) -> ProcessResult:
         """강의 처리: 미수강이면 재생+출석, 수강완료면 다운로드만"""
         import json
 
@@ -696,7 +699,17 @@ class KCUProvider:
         if not is_completed:
             attended = await self._monitor_playback(page, player_frame, title, duration_sec)
 
-        # 7. 다운로드/전사 완료 대기
+        # 7. 다운로드/전사 완료 대기 (defer_transcript=True면 백그라운드 수집)
+        if defer_transcript:
+            if transcript_task:
+                self._pending_tasks.append(transcript_task)
+            return {
+                "attended": attended,
+                "download_only": is_completed,
+                "mp4": None,
+                "txt": None,
+            }
+
         mp4 = None
         txt = None
         if transcript_task:
@@ -712,3 +725,17 @@ class KCUProvider:
             "mp4": mp4,
             "txt": txt,
         }
+
+    async def drain_tasks(self) -> list[TranscriptResult]:
+        """대기 중인 백그라운드 다운로드/전사 작업 완료 대기"""
+        if not self._pending_tasks:
+            return []
+        results = await asyncio.gather(*self._pending_tasks, return_exceptions=True)
+        self._pending_tasks.clear()
+        valid: list[TranscriptResult] = []
+        for r in results:
+            if isinstance(r, BaseException):
+                logger.error("백그라운드 작업 실패: %s", r)
+            else:
+                valid.append(r)  # type: ignore[arg-type]
+        return valid

@@ -1,7 +1,10 @@
 """영상 다운로드 및 음성-텍스트 전사"""
 
+from __future__ import annotations
+
 import asyncio
 import logging
+from typing import TYPE_CHECKING
 
 import requests as req_lib
 
@@ -15,7 +18,41 @@ from .config import (
 )
 from .types import TranscriptResult
 
+if TYPE_CHECKING:
+    from src.audio_pipeline.transcriber import WhisperTranscriber
+
 logger = logging.getLogger(__name__)
+
+# --- Whisper 싱글턴 ---
+_whisper_instance: WhisperTranscriber | None = None
+
+
+def _get_whisper() -> WhisperTranscriber:
+    global _whisper_instance
+    if _whisper_instance is None:
+        from src.audio_pipeline.transcriber import WhisperTranscriber
+
+        _whisper_instance = WhisperTranscriber()
+    return _whisper_instance
+
+
+# --- 동시성 제한 (lazy init: import 시점에 이벤트 루프 없을 수 있음) ---
+_download_sem: asyncio.Semaphore | None = None
+_transcribe_sem: asyncio.Semaphore | None = None
+
+
+def _get_download_sem() -> asyncio.Semaphore:
+    global _download_sem
+    if _download_sem is None:
+        _download_sem = asyncio.Semaphore(2)
+    return _download_sem
+
+
+def _get_transcribe_sem() -> asyncio.Semaphore:
+    global _transcribe_sem
+    if _transcribe_sem is None:
+        _transcribe_sem = asyncio.Semaphore(1)
+    return _transcribe_sem
 
 
 def _download_mp4(video_url: str, mp4_path, referer: str) -> str:
@@ -106,29 +143,29 @@ async def download_and_transcribe(
     mp4_path = course_dir / f"{safe_title}.mp4"
     txt_path = course_dir / f"{safe_title}.txt"
 
-    # 1. 다운로드
+    # 1. 다운로드 (동시 2개 제한)
     try:
-        logger.info("다운로드: 시작...")
-        if hls:
-            result["mp4"] = await _download_hls(video_url, mp4_path)
-        else:
-            result["mp4"] = await loop.run_in_executor(
-                None, _download_mp4, video_url, mp4_path, referer
-            )
-        size_mb = mp4_path.stat().st_size / (1024 * 1024)
-        logger.info("다운로드: 완료 (%.1fMB)", size_mb)
+        async with _get_download_sem():
+            logger.info("다운로드: 시작...")
+            if hls:
+                result["mp4"] = await _download_hls(video_url, mp4_path)
+            else:
+                result["mp4"] = await loop.run_in_executor(
+                    None, _download_mp4, video_url, mp4_path, referer
+                )
+            size_mb = mp4_path.stat().st_size / (1024 * 1024)
+            logger.info("다운로드: 완료 (%.1fMB)", size_mb)
     except Exception:
         logger.exception("다운로드 실패")
         return result
 
-    # 2. mp4 → wav → txt
+    # 2. mp4 → wav → txt (동시 1개 제한 — CPU 집중)
     try:
 
         def _transcribe():
             import time
 
             from src.audio_pipeline.converter import convert_mp4_to_wav
-            from src.audio_pipeline.transcriber import WhisperTranscriber
 
             wav_path = course_dir / f"{safe_title}.wav"
 
@@ -136,7 +173,7 @@ async def download_and_transcribe(
             convert_mp4_to_wav(str(mp4_path), str(wav_path))
 
             logger.info("스크립트: [2/3] Whisper 모델 로딩...")
-            transcriber = WhisperTranscriber()
+            transcriber = _get_whisper()
 
             logger.info("스크립트: [3/3] 음성 → 텍스트 전사 중...")
             t_start = time.time()
@@ -148,7 +185,8 @@ async def download_and_transcribe(
             wav_path.unlink(missing_ok=True)
             return str(txt_path)
 
-        result["txt"] = await loop.run_in_executor(None, _transcribe)
+        async with _get_transcribe_sem():
+            result["txt"] = await loop.run_in_executor(None, _transcribe)
         logger.info("스크립트: 저장 완료 → %s", txt_path.relative_to(PROJECT_DIR))
     except Exception:
         logger.exception("전사 실패")
