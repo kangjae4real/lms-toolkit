@@ -2,7 +2,7 @@
 
 ## 프로젝트 개요
 
-숭실대 LMS 동영상 강의를 자동 수강 처리 + 스크립트 추출하는 CLI 도구. 두 가지 모드 제공: 자동 수강(watch) / 다운로드(download). `src/auto_watch/` 패키지가 핵심.
+숭실대(Canvas LMS) + 숭실사이버대(KCU) 동영상 강의를 자동 수강 처리 + 스크립트 추출하는 CLI 도구. LMSProvider Protocol 기반 멀티 LMS 구조. 두 가지 모드 제공: 자동 수강(watch) / 다운로드(download). `src/auto_watch/` 패키지가 핵심.
 
 ## 실행
 
@@ -25,8 +25,14 @@ uv run pytest -v                  # 테스트
 ## 환경 변수 (.env)
 
 ```
-USERID=(학번)
-PASSWORD=(비밀번호)
+# 숭실대 (SSU_* 또는 USERID/PASSWORD로 하위호환)
+SSU_USERID=(학번)
+SSU_PASSWORD=(비밀번호)
+
+# 숭실사이버대
+KCU_USERID=(학번)
+KCU_PASSWORD=(비밀번호)
+
 CHROME_PATH=(선택, Chrome 경로 오버라이드)
 ```
 
@@ -44,7 +50,7 @@ CHROME_PATH=(선택, Chrome 경로 오버라이드)
 - `src/auto_watch/plugin.py`에 `entry_points` 기반 plugin discovery 구현
 - **학업 관리(tracker) 기능**은 별도 private 패키지 `lms-tracker`로 분리됨 (경로: `../lms-tracker/`)
   - 목적: 자동 수강이 출석을 찍어주지만 실제 공부 여부는 별도 추적 필요 (출석 vs 공부 2트랙)
-- tracker 관련 작업 시 `lms-tracker` 패키지에서 수정할 것 (`lms-summarizer`에는 tracker 코드 없음)
+- tracker 관련 작업 시 `lms-tracker` 패키지에서 수정할 것 (`lms-toolkit`에는 tracker 코드 없음)
 
 ## 규칙
 

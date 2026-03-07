@@ -1,12 +1,12 @@
 # LMS Auto-Watch & Transcript — Spec
 
 > 작성: 2026-03-02 20:42
-> 갱신: 2026-03-03
-> 상태: 초안 — 리뷰 필요
+> 갱신: 2026-03-07
+> 상태: M3.6 완료 — 멀티 LMS + KCU Provider 구현됨
 
 ## 한 줄 목적
 
-숭실대 LMS 사전녹화 강의를 자동 재생(출석 처리)하고, 재생 중 스크립트를 추출해두는 도구. 두 가지 모드(자동 수강 / 다운로드)를 제공.
+숭실대(Canvas) + 숭실사이버대(KCU) LMS 사전녹화 강의를 자동 재생(출석 처리)하고, 재생 중 스크립트를 추출해두는 도구. LMSProvider Protocol 기반 멀티 LMS 구조. 두 가지 모드(자동 수강 / 다운로드)를 제공.
 
 ## 왜 필요한가
 
@@ -16,7 +16,7 @@
 
 ## 사용자
 
-나 (숭실대 학부생, 1명). 개인 도구.
+나 (숭실대 학부생 + 숭실사이버대 학점교류생, 1명). 개인 도구.
 
 ## 사용 모드
 
@@ -121,7 +121,8 @@ output/
 
 ## 제약
 
-- **1x 배속 필수**: LMS 서버가 `invalidPbrate`로 배속 감지. 초과 시 부정행위 처리
+- **SSU 1x 배속 필수**: SSU LMS 서버가 `invalidPbrate`로 배속 감지. 초과 시 부정행위 처리
+- **KCU 2x 배속 기본**: KCU는 배속 제한 없음. 2배속 자동 설정
 - **동시 수강 불가**: 창 여러 개로 동시 재생하면 안 됨. 순차 재생만
 - **headed 브라우저**: 헤드리스면 LTI 플레이어가 완료 이벤트 안 보낼 수 있음
 - **SSO 로그인**: `page.type` + JS `btn_click` 방식 (Playwright `fill`이 안 먹힘)
@@ -147,8 +148,10 @@ output/
 2. **M2 — 스크립트 추출 연결**: 재생 중 영상 다운로드 + faster-whisper 파이프라인 연결 ✅
 3. **M2.5 — 수강완료 강의 다운로드**: 아래 상세 스펙 참고 ✅
 4. **M3 — watch/download 모드 분리**: 모드 선택 UI + movie 필터 + lazy 스캔 ✅
-5. **M4 — 자동 모드**: `--auto` 플래그 + 전체 자동 재생
-6. **M5 — OpenClaw + 텔레그램**: cron 트리거 + 결과 알림
+5. **M3.5 — 멀티 LMS 구조**: LMSProvider Protocol 기반 + 학교 선택 메뉴 ✅
+6. **M3.6 — KCU Provider**: 숭실사이버대 로그인/과목/강의/재생 전체 구현 ✅
+7. **M4 — 자동 모드**: `--auto` 플래그 + 전체 자동 재생
+8. **M5 — OpenClaw + 텔레그램**: cron 트리거 + 결과 알림
 
 ---
 
@@ -352,15 +355,18 @@ output/
 
 ---
 
-### 7. 수정 대상 파일
+### 7. 파일 구조 (현재)
 
-| 파일 | 주요 함수 | 역할 |
+| 파일 | 주요 함수/클래스 | 역할 |
 |------|----------|------|
-| `src/auto_watch/main.py` | `main()`, `_run_watch_mode()`, `_run_download_mode()` | 모드별 흐름 분기, 로그인 재시도, 플러그인 dispatch |
-| `src/auto_watch/cli.py` | `select_mode()`, `select_courses()`, `select_lectures()` | 모드/과목/강의 선택 UI (플러그인 동적 메뉴) |
+| `src/auto_watch/main.py` | `main()`, `_run_watch_mode()`, `_run_download_mode()` | 학교 선택 → 모드 분기 → 실행 |
+| `src/auto_watch/cli.py` | `select_school()`, `select_mode()`, `select_courses()`, `select_lectures()` | CLI UI (학교/모드/과목/강의 선택) |
+| `src/auto_watch/provider.py` | `LMSProvider` Protocol, `get_provider()` | 멀티 LMS Provider 인터페이스 + 팩토리 |
+| `src/auto_watch/providers/ssu.py` | `SSUProvider` | 숭실대: login, get_courses, get_lectures, process_lecture |
+| `src/auto_watch/providers/kcu.py` | `KCUProvider` | 숭실사이버대: login, get_courses, get_lectures, process_lecture |
 | `src/auto_watch/plugin.py` | `discover_plugins()`, `LMSPlugin` | entry_points 기반 플러그인 인프라 |
-| `src/auto_watch/config.py` | `update_credentials()` | 환경변수 + 상수, .env 자격증명 갱신 |
-| `src/auto_watch/courses.py` | `get_courses()`, `get_lectures()` | 과목/강의 수집, movie 타입 필터 |
-| `src/auto_watch/player.py` | `process_lecture()` | `isCompleted` 분기 + 즉시 정지 로직 |
-| `src/auto_watch/browser.py` | `setup_browser()`, `login_if_needed()` | 브라우저 설정, SSO 로그인 |
+| `src/auto_watch/config.py` | `SchoolConfig`, `SCHOOL_CONFIGS` | 학교별 설정 + 환경변수 |
+| `src/auto_watch/browser.py` | `setup_browser()` | Playwright 브라우저 설정 |
 | `src/auto_watch/transcription.py` | `download_and_transcribe()` | 영상 다운로드 + 전사 |
+
+> `courses.py`, `player.py`는 Provider 구조 전환 시 삭제됨 → 각 Provider 클래스 메서드로 통합.
