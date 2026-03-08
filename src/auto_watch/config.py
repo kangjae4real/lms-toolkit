@@ -60,6 +60,9 @@ def update_credentials(school: str, userid: str, password: str) -> None:
 PROJECT_DIR = Path(__file__).parent.parent.parent
 OUTPUT_DIR = PROJECT_DIR / "output"
 
+# Obsidian vault (플러그인용)
+VAULT_PATH = os.getenv("VAULT_PATH", "")
+
 # 브라우저
 CHROME_PATH = os.getenv(
     "CHROME_PATH",
