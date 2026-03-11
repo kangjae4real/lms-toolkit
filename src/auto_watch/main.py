@@ -12,7 +12,7 @@ from playwright.async_api import Page, async_playwright
 
 from .browser import setup_browser
 from .cli import select_courses, select_lectures, select_mode, select_school
-from .config import HEADLESS, SCHOOL_CONFIGS, update_credentials
+from .config import HEADLESS, SCHOOL_CONFIGS, TRANSCRIBE, update_credentials
 from .exceptions import LMSError, LoginError
 from .log import setup_logging
 from .plugin import discover_plugins
@@ -22,7 +22,13 @@ from .types import Course
 logger = logging.getLogger(__name__)
 
 
-async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvider) -> str | None:
+async def _run_watch_mode(
+    page: Page,
+    courses: list[Course],
+    provider: LMSProvider,
+    *,
+    transcribe: bool,
+) -> str | None:
     """자동 수강 모드: 미수강 동영상만 재생 + 다운로드/전사"""
     target_courses = [c for c in courses if c["videoCount"] > 0]
 
@@ -57,7 +63,12 @@ async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvid
 
     for i, lecture in enumerate(selected, 1):
         print(f"\n[{i}/{len(selected)}]", end=" ")
-        result = await provider.process_lecture(page, lecture, defer_transcript=True)
+        result = await provider.process_lecture(
+            page,
+            lecture,
+            defer_transcript=True,
+            transcribe=transcribe,
+        )
         if result.get("download_only"):
             download_only += 1
         elif result["attended"]:
@@ -84,7 +95,11 @@ async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvid
 
 
 async def _run_download_mode(
-    page: Page, courses: list[Course], provider: LMSProvider
+    page: Page,
+    courses: list[Course],
+    provider: LMSProvider,
+    *,
+    transcribe: bool,
 ) -> str | None:
     """다운로드 모드: 과목 선택 → 강의 선택 → 다운로드/전사만"""
     while True:
@@ -118,12 +133,20 @@ async def _run_download_mode(
         for i, lecture in enumerate(selected, 1):
             print(f"\n[{i}/{len(selected)}]", end=" ")
             lecture["isCompleted"] = True
-            await provider.process_lecture(page, lecture, defer_transcript=True)
+            await provider.process_lecture(
+                page,
+                lecture,
+                defer_transcript=True,
+                transcribe=transcribe,
+            )
             await asyncio.sleep(3)
 
         # 백그라운드 다운로드/전사 완료 대기
         print()
-        logger.info("다운로드/전사 완료 대기 중...")
+        if transcribe:
+            logger.info("다운로드/전사 완료 대기 중...")
+        else:
+            logger.info("다운로드 완료 대기 중...")
         transcript_results = await provider.drain_tasks()
         transcribed = sum(1 for r in transcript_results if r.get("txt"))
 
@@ -143,6 +166,15 @@ def _parse_args(plugins=None) -> argparse.Namespace:
         action="store_true",
         default=HEADLESS,
         help="브라우저를 headless 모드로 실행합니다. (env: LMS_HEADLESS=1)",
+    )
+    parser.add_argument(
+        "--transcribe",
+        action=argparse.BooleanOptionalAction,
+        default=TRANSCRIBE,
+        help=(
+            "강의 스크립트 전사를 수행합니다. "
+            "(--no-transcribe 또는 env: LMS_TRANSCRIBE=0 으로 비활성화)"
+        ),
     )
     if plugins:
         for plugin in plugins:
@@ -198,6 +230,8 @@ async def main() -> None:
     print("=" * 60)
     print(f"  {provider.display_name} LMS 자동 수강 시스템")
     print(f"  시작: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    if not args.transcribe:
+        print("  스크립트 전사: 비활성화 (--no-transcribe)")
     print("  종료: q 또는 Ctrl+C")
     print("=" * 60)
 
@@ -240,9 +274,19 @@ async def main() -> None:
                 if mode == "quit":
                     break
                 elif mode == "watch":
-                    result = await _run_watch_mode(page, courses, provider)
+                    result = await _run_watch_mode(
+                        page,
+                        courses,
+                        provider,
+                        transcribe=args.transcribe,
+                    )
                 elif mode == "download":
-                    result = await _run_download_mode(page, courses, provider)
+                    result = await _run_download_mode(
+                        page,
+                        courses,
+                        provider,
+                        transcribe=args.transcribe,
+                    )
                 elif mode in plugin_map:
                     result = await plugin_map[mode].run(page, courses)
                 else:

@@ -40,12 +40,12 @@ $ python -m src.auto_watch
 2. 마이페이지에서 `videoCount > 0`인 과목만 주차학습 페이지 진입
 3. movie 타입 강의만 수집 (PDF/과제 제외)
 4. 사용자가 번호 선택 (복수 선택, `all`, `q`로 종료)
-5. 선택한 강의를 순차 재생 + 병렬로 다운로드/전사
+5. 선택한 강의를 순차 재생 + 병렬로 다운로드/전사(옵션)
 6. 결과 요약 출력
 
 ### 모드 2 — 다운로드 (download)
 
-과목을 먼저 선택 → 해당 과목만 lazy 스캔 → 다운로드/전사만 수행.
+과목을 먼저 선택 → 해당 과목만 lazy 스캔 → 다운로드/전사(옵션)만 수행.
 
 ```
 번호 (1/2): 2
@@ -65,7 +65,7 @@ $ python -m src.auto_watch
 1. 실행 → 모드 선택 → SSO 자동 로그인
 2. 마이페이지에서 과목 목록 표시 (주차학습 페이지 미진입 — 빠름)
 3. 사용자가 과목 선택 → 해당 과목만 주차학습 페이지 진입
-4. movie 타입 강의 중 선택 → 다운로드/전사만 수행 (재생/출석 없음)
+4. movie 타입 강의 중 선택 → 다운로드/전사(옵션)만 수행 (재생/출석 없음)
 
 ### 모드 B — 자동 (cron, 미구현)
 
@@ -125,6 +125,7 @@ output/
 - **KCU 2x 배속 기본**: KCU는 배속 제한 없음. 2배속 자동 설정
 - **동시 수강 불가**: 창 여러 개로 동시 재생하면 안 됨. 순차 재생만
 - 기본은 **headed 브라우저**. 필요 시 `--headless` 또는 `LMS_HEADLESS=1`로 실행 가능
+- 전사는 기본 활성화. 필요 시 `--no-transcribe` 또는 `LMS_TRANSCRIBE=0`으로 비활성화 가능
 - 브라우저 실행 파일 우선순위: `CHROME_PATH` → OS 기본 Chrome 경로 탐색 → Playwright Chromium
 - **SSO 로그인**: `page.type` + JS `btn_click` 방식 (Playwright `fill`이 안 먹힘)
 
@@ -360,7 +361,7 @@ output/
 
 | 파일 | 주요 함수/클래스 | 역할 |
 |------|----------|------|
-| `src/auto_watch/main.py` | `main()`, `_run_watch_mode()`, `_run_download_mode()` | 학교 선택 → 모드 분기 → 실행 |
+| `src/auto_watch/main.py` | `main()`, `_run_watch_mode()`, `_run_download_mode()`, `_parse_args()` | 학교 선택 → 모드 분기 → 실행 (`--[no-]transcribe` 지원) |
 | `src/auto_watch/cli.py` | `select_school()`, `select_mode()`, `select_courses()`, `select_lectures()` | CLI UI (학교/모드/과목/강의 선택) |
 | `src/auto_watch/provider.py` | `LMSProvider` Protocol, `get_provider()` | 멀티 LMS Provider 인터페이스 + 팩토리 |
 | `src/auto_watch/providers/ssu.py` | `SSUProvider` | 숭실대: login, get_courses, get_lectures, process_lecture |
@@ -368,6 +369,6 @@ output/
 | `src/auto_watch/plugin.py` | `discover_plugins()`, `LMSPlugin` | entry_points 기반 플러그인 인프라 |
 | `src/auto_watch/config.py` | `SchoolConfig`, `SCHOOL_CONFIGS` | 학교별 설정 + 환경변수 |
 | `src/auto_watch/browser.py` | `setup_browser()` | Playwright 브라우저 설정 |
-| `src/auto_watch/transcription.py` | `download_and_transcribe()` | 영상 다운로드 + 전사 |
+| `src/auto_watch/transcription.py` | `download_and_transcribe()` | 영상 다운로드 + 전사(옵션) |
 
 > `courses.py`, `player.py`는 Provider 구조 전환 시 삭제됨 → 각 Provider 클래스 메서드로 통합.

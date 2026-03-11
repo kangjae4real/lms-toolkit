@@ -103,6 +103,7 @@ USER_AGENT = (
     "Chrome/122.0.0.0 Safari/537.36"
 )
 HEADLESS = _env_flag("LMS_HEADLESS", default=False)
+TRANSCRIBE = _env_flag("LMS_TRANSCRIBE", default=True)
 
 # 타임아웃 (밀리초)
 LOGIN_TIMEOUT_MS = 10_000
