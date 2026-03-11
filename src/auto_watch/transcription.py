@@ -131,6 +131,7 @@ async def download_and_transcribe(
     *,
     referer: str = "",
     hls: bool = False,
+    transcribe: bool = True,
 ) -> TranscriptResult:
     """영상 다운로드 + 음성→텍스트 전사 (재생과 병렬 실행)"""
     loop = asyncio.get_running_loop()
@@ -157,6 +158,10 @@ async def download_and_transcribe(
             logger.info("다운로드: 완료 (%.1fMB)", size_mb)
     except Exception:
         logger.exception("다운로드 실패")
+        return result
+
+    if not transcribe:
+        logger.info("스크립트: 비활성화됨 — MP4만 저장")
         return result
 
     # 2. mp4 → wav → txt (동시 1개 제한 — CPU 집중)

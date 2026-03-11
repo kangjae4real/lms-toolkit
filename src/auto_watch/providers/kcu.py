@@ -617,7 +617,12 @@ class KCUProvider:
             await asyncio.sleep(5)
 
     async def process_lecture(
-        self, page: Page, lecture: Lecture, *, defer_transcript: bool = False
+        self,
+        page: Page,
+        lecture: Lecture,
+        *,
+        defer_transcript: bool = False,
+        transcribe: bool = True,
     ) -> ProcessResult:
         """강의 처리: 미수강이면 재생+출석, 수강완료면 다운로드만"""
         import json
@@ -689,10 +694,11 @@ class KCUProvider:
                     course_name,
                     title,
                     hls=is_hls,
+                    transcribe=transcribe,
                 )
             )
         else:
-            logger.info("스트림 URL 미감지 - 스크립트 추출 건너뜀")
+            logger.info("스트림 URL 미감지 - 다운로드/스크립트 추출 건너뜀")
 
         # 6. 미수강: 재생 진행 모니터링 (headed 브라우저에서 진도 보고 자동)
         attended = False

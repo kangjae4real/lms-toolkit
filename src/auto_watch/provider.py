@@ -28,7 +28,12 @@ class LMSProvider(Protocol):
     async def get_lectures(self, page: Page, course_id: str, course_name: str) -> list[Lecture]: ...
 
     async def process_lecture(
-        self, page: Page, lecture: Lecture, *, defer_transcript: bool = False
+        self,
+        page: Page,
+        lecture: Lecture,
+        *,
+        defer_transcript: bool = False,
+        transcribe: bool = True,
     ) -> ProcessResult: ...
 
     async def drain_tasks(self) -> list[TranscriptResult]: ...

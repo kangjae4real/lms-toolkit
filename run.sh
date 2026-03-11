@@ -25,4 +25,4 @@ fi
 
 # 가상환경 활성화 및 실행
 source .venv/bin/activate
-python -m src.auto_watch
+python -m src.auto_watch "$@"

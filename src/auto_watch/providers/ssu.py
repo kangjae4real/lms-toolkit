@@ -462,7 +462,12 @@ class SSUProvider:
             await asyncio.sleep(5)
 
     async def process_lecture(
-        self, page: Page, lecture: Lecture, *, defer_transcript: bool = False
+        self,
+        page: Page,
+        lecture: Lecture,
+        *,
+        defer_transcript: bool = False,
+        transcribe: bool = True,
     ) -> ProcessResult:
         """강의 처리: 미수강이면 재생+출석, 수강완료면 다운로드만"""
         title = lecture["title"]
@@ -509,10 +514,11 @@ class SSUProvider:
                     course_name,
                     title,
                     referer="https://commons.ssu.ac.kr/",
+                    transcribe=transcribe,
                 )
             )
         else:
-            logger.info("영상 URL 미감지 — 스크립트 추출 건너뜀")
+            logger.info("영상 URL 미감지 — 다운로드/스크립트 추출 건너뜀")
 
         # 미수강: 재생 진행 모니터링
         attended = False
