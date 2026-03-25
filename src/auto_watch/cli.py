@@ -212,9 +212,9 @@ def _display_lectures(all_lectures: list[dict], expanded: bool) -> list[dict]:
     else:
         print(f"\n  총 재생시간: {_format_duration(unwatched_sec)} (미수강)")
 
-    # 미수강 0개 안내
-    if not unwatched:
-        print("\n  미수강 강의가 없습니다. 수강완료 강의를 다운로드하려면 'e'를 입력하세요.")
+    # 미수강 0개 안내 (접힌 상태에서만 — 펼친 상태에서는 이미 전체 보임)
+    if not unwatched and not expanded:
+        print("\n  미수강 강의가 없습니다. 'e'로 수강완료 강의를 펼쳐보세요.")
 
     print()
     return visible
