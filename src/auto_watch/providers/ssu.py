@@ -8,13 +8,11 @@ from datetime import datetime
 from playwright.async_api import Frame, Page, Request
 
 from ..config import (
-    IFRAME_TIMEOUT_MS,
     LOGIN_TIMEOUT_MS,
     PLAYBACK_COMPLETION_THRESHOLD,
     PLAYBACK_LOG_INTERVAL_SEC,
     PLAYBACK_TIMEOUT_BUFFER_SEC,
     RESUME_DIALOG_POST_PLAY_TIMEOUT_MS,
-    RESUME_DIALOG_TIMEOUT_MS,
     SELECTOR_TIMEOUT_MS,
     SchoolConfig,
 )
@@ -127,14 +125,35 @@ class SSUProvider:
 
     # ── iframe 헬퍼 ─────────────────────────────────────────
 
-    async def _get_tool_content_frame(self, page: Page, timeout: int = 15000) -> Frame:
+    async def _get_tool_content_frame(
+        self, page: Page, timeout: int = 30000, *, lecture_page: bool = False
+    ) -> Frame:
         """tool_content iframe의 Frame 객체를 반환"""
         await page.wait_for_selector("#tool_content", timeout=timeout)
         frame = page.frame("tool_content")
         if not frame:
             raise BrowserError("tool_content frame not found")
-        await frame.wait_for_load_state("domcontentloaded")
-        await asyncio.sleep(2)
+
+        if lecture_page:
+            # 강의 개별 페이지: commons 플레이어 iframe 대기
+            await frame.wait_for_selector(
+                ".xnlailvc-commons-frame", timeout=timeout
+            )
+        else:
+            # 주차학습/마이페이지: AJAX 콘텐츠 로드 대기
+            # 주의: "모두 접기"는 빈 상태에서도 보이므로 조건에서 제외
+            await frame.wait_for_function(
+                """() => {
+                    if (document.querySelector('.xnmb-module_item-outer-wrapper')) return true;
+                    const btns = document.querySelectorAll('button');
+                    for (const b of btns) {
+                        if (b.textContent.includes('모두 펼치기')) return true;
+                    }
+                    if (document.querySelector('.xn-student-course-container')) return true;
+                    return false;
+                }""",
+                timeout=timeout,
+            )
         return frame
 
     def _find_commons_frame(self, page: Page) -> Frame | None:
@@ -156,7 +175,11 @@ class SSUProvider:
                 await page.goto(self._mypage_url, wait_until="networkidle")
 
         frame = await self._get_tool_content_frame(page)
+
+        # todo 카운트가 별도 AJAX로 로드되어 컨테이너 출현 시점에 0일 수 있음
+        # networkidle로 todo AJAX 완료까지 대기
         await frame.wait_for_selector(".xn-student-course-container", timeout=15000)
+        await page.wait_for_load_state("networkidle")
 
         courses: list[Course] = await frame.evaluate("""
             () => {
@@ -200,22 +223,27 @@ class SSUProvider:
         """과목의 주차학습 페이지에서 강의 목록 반환"""
         url = f"{self._base_url}/courses/{course_id}/external_tools/71"
         logger.info("주차학습 페이지 로드 중... (course %s)", course_id)
-        await page.goto(url, wait_until="networkidle")
+        await page.goto(url, wait_until="load")
         await self._sso_login_if_needed(page)
         if "external_tools/71" not in page.url:
-            await page.goto(url, wait_until="networkidle")
+            await page.goto(url, wait_until="load")
 
+        # iframe AJAX 완료 대기 (주차 목록 + 강의 데이터 로드)
+        await page.wait_for_load_state("networkidle")
         frame = await self._get_tool_content_frame(page)
 
         # "모두 펼치기" 클릭하여 전체 주차 확장
+        # dispatch_event: Canvas breadcrumb 오버레이가 iframe 버튼 클릭을 가로채는 문제 우회
         try:
             expand_btn = await frame.query_selector('text="모두 펼치기"')
             if expand_btn:
-                await expand_btn.click()
-                await asyncio.sleep(2)
+                await expand_btn.dispatch_event("click")
+                await frame.wait_for_selector(
+                    ".xnmb-module_item-outer-wrapper", timeout=10000
+                )
                 logger.info("전체 주차 펼침")
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("주차 펼치기 실패: %s", e)
 
         lectures: list[Lecture] = await frame.evaluate("""
             () => {
@@ -311,25 +339,46 @@ class SSUProvider:
 
     async def _enter_lecture_page(self, page: Page, lecture: Lecture) -> Frame | None:
         """강의 페이지 진입 → iframe 대기 → 이어보기 처리 → commons frame 반환"""
-        await page.goto(lecture["href"], wait_until="networkidle")
+        await page.goto(lecture["href"], wait_until="load")
 
-        tool_frame = await self._get_tool_content_frame(page)
-        await tool_frame.wait_for_selector(".xnlailvc-commons-frame", timeout=IFRAME_TIMEOUT_MS)
-        await asyncio.sleep(3)
+        await self._get_tool_content_frame(page, lecture_page=True)
 
-        commons = self._find_commons_frame(page)
+        # commons iframe이 실제 URL로 로드될 때까지 대기
+        commons = None
+        for _ in range(60):  # 최대 30초
+            commons = self._find_commons_frame(page)
+            if commons:
+                break
+            await asyncio.sleep(0.5)
+
         if not commons:
             logger.error("commons.ssu.ac.kr iframe을 찾을 수 없음")
             return None
 
-        # "이전에 시청했던 XX:XX부터 이어서 보시겠습니까?" 다이얼로그 처리
+        # commons 플레이어 초기화 대기 (재생 버튼 또는 이어보기 다이얼로그)
         try:
-            ok_btn = await commons.wait_for_selector(
-                ".confirm-ok-btn",
-                timeout=RESUME_DIALOG_TIMEOUT_MS,
+            await commons.wait_for_selector(
+                ".vc-front-screen-play-btn, .confirm-ok-btn",
+                timeout=SELECTOR_TIMEOUT_MS,
                 state="visible",
             )
-            if ok_btn:
+        except Exception:
+            # 디버그: commons 내부 상태 확인
+            try:
+                state = await commons.evaluate("""() => ({
+                    playBtn: !!document.querySelector('.vc-front-screen-play-btn'),
+                    video: !!document.querySelector('video'),
+                    bodyLen: document.body?.innerHTML?.length || 0,
+                    bodyText: document.body?.innerText?.substring(0, 100) || ''
+                })""")
+                logger.warning("commons 플레이어 초기화 타임아웃: %s", state)
+            except Exception:
+                logger.warning("commons 플레이어 초기화 타임아웃 (상태 확인 실패)")
+
+        # "이전에 시청했던 XX:XX부터 이어서 보시겠습니까?" 다이얼로그 처리
+        try:
+            ok_btn = await commons.query_selector(".confirm-ok-btn")
+            if ok_btn and await ok_btn.is_visible():
                 await ok_btn.click()
                 logger.info("이어보기 다이얼로그 → '예' (이어서 재생)")
                 await asyncio.sleep(1)
