@@ -3,6 +3,7 @@
 import re
 from collections import OrderedDict
 from datetime import datetime
+from pathlib import Path
 
 from .config import SCHOOL_CONFIGS
 
@@ -273,6 +274,94 @@ def select_lectures(all_lectures: list[dict], download_mode: bool = False) -> li
         except ValueError:
             valid_cmds = "숫자, all, b, q, e" if not expanded else "숫자, all, b, q"
             print(f"  {valid_cmds} 중 하나를 입력하세요.")
+
+
+def select_local_videos(output_dir: Path) -> list[Path]:
+    """output/ 폴더의 MP4 파일 목록 표시 → 사용자 선택"""
+    if not output_dir.exists():
+        print("\n  output/ 폴더가 없습니다.")
+        return []
+
+    # MP4 파일 스캔
+    mp4_files: list[Path] = []
+    for course_dir in sorted(output_dir.iterdir()):
+        if not course_dir.is_dir():
+            continue
+        for mp4 in sorted(course_dir.glob("*.mp4")):
+            mp4_files.append(mp4)
+
+    if not mp4_files:
+        print("\n  output/ 폴더에 MP4 파일이 없습니다.")
+        return []
+
+    transcribed_count = sum(1 for f in mp4_files if f.with_suffix(".txt").exists())
+    untranscribed_count = len(mp4_files) - transcribed_count
+
+    print("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print(
+        f"  output/ 영상 {len(mp4_files)}개"
+        f" (전사 완료 {transcribed_count} / 미전사 {untranscribed_count}):"
+    )
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+
+    # 과목별 그룹핑
+    groups: OrderedDict[str, list[Path]] = OrderedDict()
+    for mp4 in mp4_files:
+        course_name = mp4.parent.name
+        if course_name not in groups:
+            groups[course_name] = []
+        groups[course_name].append(mp4)
+
+    visible: list[Path] = []
+    for course_name, items in groups.items():
+        course_untranscribed = sum(1 for f in items if not f.with_suffix(".txt").exists())
+        if course_untranscribed:
+            header = f"{course_name} (미전사 {course_untranscribed})"
+        else:
+            header = f"{course_name} (전사 완료)"
+        print(f"\n  ── {header} ──")
+
+        for mp4 in items:
+            visible.append(mp4)
+            idx = len(visible)
+            status = "T" if mp4.with_suffix(".txt").exists() else " "
+            print(f"  [{idx:2d}] {status}  {mp4.stem}")
+
+    print()
+
+    while True:
+        try:
+            choice = input("번호 / all(전체) / u(미전사만) / q(종료): ").strip().lower()
+        except EOFError:
+            return []
+
+        if choice == "q":
+            return []
+
+        if choice == "all":
+            return visible
+
+        if choice == "u":
+            untranscribed = [f for f in visible if not f.with_suffix(".txt").exists()]
+            if not untranscribed:
+                print("  미전사 파일이 없습니다.")
+                continue
+            return untranscribed
+
+        try:
+            parts = choice.replace(",", " ").split()
+            indices = [int(x) for x in parts]
+            selected = []
+            for idx in indices:
+                if 1 <= idx <= len(visible):
+                    selected.append(visible[idx - 1])
+                else:
+                    print(f"  [WARN] {idx}번은 범위 밖 (1~{len(visible)})")
+            if selected:
+                return selected
+            print("  유효한 번호를 입력하세요.")
+        except ValueError:
+            print("  숫자, all, u, q 중 하나를 입력하세요.")
 
 
 def _safe_filename(name: str) -> str:

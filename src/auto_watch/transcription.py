@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import requests as req_lib
@@ -53,6 +55,21 @@ def _get_transcribe_sem() -> asyncio.Semaphore:
     if _transcribe_sem is None:
         _transcribe_sem = asyncio.Semaphore(1)
     return _transcribe_sem
+
+
+# 로컬 전사 전용 세마포어 (다운로드와 경쟁하지 않으므로 병렬 실행 가능)
+_local_transcribe_sem: asyncio.Semaphore | None = None
+
+
+def _get_local_transcribe_sem() -> asyncio.Semaphore:
+    global _local_transcribe_sem
+    if _local_transcribe_sem is None:
+        try:
+            concurrency = int(os.getenv("LMS_LOCAL_TRANSCRIBE_CONCURRENCY", "2"))
+        except ValueError:
+            concurrency = 2
+        _local_transcribe_sem = asyncio.Semaphore(max(1, concurrency))
+    return _local_transcribe_sem
 
 
 def _download_mp4(video_url: str, mp4_path, referer: str) -> str:
@@ -197,3 +214,77 @@ async def download_and_transcribe(
         logger.exception("전사 실패")
 
     return result
+
+
+async def ensure_whisper_model() -> bool:
+    """Whisper 모델이 준비되어 있는지 확인. 없으면 다운로드 안내 후 로딩."""
+    if _whisper_instance is not None:
+        return True
+
+    # HuggingFace 캐시에서 모델 존재 여부 확인
+    cache_dir = Path.home() / ".cache" / "huggingface" / "hub"
+    cached = False
+    if cache_dir.exists():
+        for model_dir in cache_dir.glob("models--*faster-whisper*turbo*"):
+            snapshots = model_dir / "snapshots"
+            if snapshots.exists() and any(snapshots.iterdir()):
+                cached = True
+                break
+
+    if not cached:
+        print("\n  Whisper 모델이 설치되어 있지 않습니다.")
+        print("  첫 실행 시 turbo 모델(~1.5GB)을 다운로드합니다.")
+        try:
+            choice = input("  다운로드하시겠습니까? (Y/n): ").strip().lower()
+        except EOFError:
+            return False
+        if choice == "n":
+            return False
+
+    logger.info("Whisper 모델 로딩 중...")
+    loop = asyncio.get_running_loop()
+    try:
+        await loop.run_in_executor(None, _get_whisper)
+        logger.info("Whisper 모델 준비 완료")
+        return True
+    except Exception:
+        logger.exception("Whisper 모델 로딩 실패")
+        return False
+
+
+async def transcribe_local_file(mp4_path: Path) -> str | None:
+    """이미 다운로드된 MP4 파일을 전사만 수행 (다운로드 없이, 병렬 실행 가능)"""
+    loop = asyncio.get_running_loop()
+    txt_path = mp4_path.with_suffix(".txt")
+    label = mp4_path.stem
+
+    def _transcribe() -> str:
+        import time
+
+        from src.audio_pipeline.converter import convert_mp4_to_wav
+
+        wav_path = mp4_path.with_suffix(".wav")
+
+        logger.info("[%s] mp4 → wav 변환 중...", label)
+        convert_mp4_to_wav(str(mp4_path), str(wav_path))
+
+        transcriber = _get_whisper()
+
+        logger.info("[%s] 음성 → 텍스트 전사 중...", label)
+        t_start = time.time()
+        transcriber.transcribe(str(wav_path), str(txt_path))
+        elapsed = time.time() - t_start
+        em, es = divmod(int(elapsed), 60)
+        logger.info("[%s] 전사 완료 (%d분 %d초)", label, em, es)
+
+        wav_path.unlink(missing_ok=True)
+        return str(txt_path)
+
+    try:
+        async with _get_local_transcribe_sem():
+            txt: str = await loop.run_in_executor(None, _transcribe)
+        logger.info("[%s] 저장 완료 → %s", label, txt_path.relative_to(PROJECT_DIR))
+        return txt
+    except Exception:
+        logger.exception("[%s] 전사 실패", label)
+        return None

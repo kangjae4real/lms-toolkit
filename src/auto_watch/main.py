@@ -7,16 +7,18 @@ import getpass
 import logging
 import sys
 from datetime import datetime
+from pathlib import Path
 
 from playwright.async_api import Page, async_playwright
 
 from .browser import setup_browser
-from .cli import select_courses, select_lectures, select_mode, select_school
-from .config import HEADLESS, SCHOOL_CONFIGS, TRANSCRIBE, update_credentials
+from .cli import select_courses, select_lectures, select_local_videos, select_mode, select_school
+from .config import HEADLESS, OUTPUT_DIR, SCHOOL_CONFIGS, TRANSCRIBE, update_credentials
 from .exceptions import LMSError, LoginError
 from .log import setup_logging
 from .plugin import discover_plugins
 from .provider import LMSProvider, get_provider
+from .transcription import ensure_whisper_model, transcribe_local_file
 from .types import Course
 
 logger = logging.getLogger(__name__)
@@ -159,6 +161,44 @@ async def _run_download_mode(
         break
 
 
+async def _run_transcribe_local() -> None:
+    """로컬 전사 모드: output/ 폴더의 MP4를 전사만 수행 (브라우저/로그인 불필요)"""
+    print("=" * 60)
+    print("  로컬 전사 모드 — output/ 폴더의 영상 전사")
+    print("=" * 60)
+
+    selected = select_local_videos(OUTPUT_DIR)
+    if not selected:
+        return
+
+    # Whisper 모델 사전 확인 (없으면 다운로드 안내)
+    if not await ensure_whisper_model():
+        return
+
+    total = len(selected)
+    print(f"\n{total}개 영상 전사를 병렬로 시작합니다...\n")
+    for i, mp4 in enumerate(selected, 1):
+        print(f"  [{i}/{total}] {mp4.parent.name}/{mp4.stem}")
+    print()
+
+    async def _run_one(idx: int, mp4: Path) -> bool:
+        result = await transcribe_local_file(mp4)
+        status = "완료" if result else "실패"
+        logger.info("[%d/%d] %s: %s", idx, total, status, mp4.stem)
+        return bool(result)
+
+    results = await asyncio.gather(*[_run_one(i, mp4) for i, mp4 in enumerate(selected, 1)])
+    transcribed = sum(1 for r in results if r)
+    failed = sum(1 for r in results if not r)
+
+    print(f"\n{'═' * 40}")
+    print("  완료!")
+    print(f"  전사 완료: {transcribed}개")
+    if failed:
+        print(f"  전사 실패: {failed}개")
+    print(f"{'═' * 40}")
+
+
 def _parse_args(plugins=None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="LMS 자동 수강 시스템")
     parser.add_argument(
@@ -176,6 +216,12 @@ def _parse_args(plugins=None) -> argparse.Namespace:
             "(--no-transcribe 또는 env: LMS_TRANSCRIBE=0 으로 비활성화)"
         ),
     )
+    parser.add_argument(
+        "--transcribe-local",
+        action="store_true",
+        default=False,
+        help="output/ 폴더의 이미 다운로드된 영상을 전사만 수행합니다. (브라우저/로그인 불필요)",
+    )
     if plugins:
         for plugin in plugins:
             plugin.add_arguments(parser)
@@ -192,6 +238,11 @@ async def main() -> None:
     setup_logging()
     plugins = discover_plugins()
     args = _parse_args(plugins)
+
+    # 로컬 전사 모드 (브라우저/로그인 불필요)
+    if args.transcribe_local:
+        await _run_transcribe_local()
+        return
 
     # 학교 선택 + Provider 생성
     school = select_school()

@@ -361,14 +361,14 @@ output/
 
 | 파일 | 주요 함수/클래스 | 역할 |
 |------|----------|------|
-| `src/auto_watch/main.py` | `main()`, `_run_watch_mode()`, `_run_download_mode()`, `_parse_args()` | 학교 선택 → 모드 분기 → 실행 (`--[no-]transcribe` 지원) |
-| `src/auto_watch/cli.py` | `select_school()`, `select_mode()`, `select_courses()`, `select_lectures()` | CLI UI (학교/모드/과목/강의 선택) |
+| `src/auto_watch/main.py` | `main()`, `_run_watch_mode()`, `_run_download_mode()`, `_run_transcribe_local()`, `_parse_args()` | 학교 선택 → 모드 분기 → 실행 (`--[no-]transcribe`, `--transcribe-local` 지원) |
+| `src/auto_watch/cli.py` | `select_school()`, `select_mode()`, `select_courses()`, `select_lectures()`, `select_local_videos()` | CLI UI (학교/모드/과목/강의/로컬 영상 선택) |
 | `src/auto_watch/provider.py` | `LMSProvider` Protocol, `get_provider()` | 멀티 LMS Provider 인터페이스 + 팩토리 |
 | `src/auto_watch/providers/ssu.py` | `SSUProvider` | 숭실대: login, get_courses, get_lectures, process_lecture |
 | `src/auto_watch/providers/kcu.py` | `KCUProvider` | 숭실사이버대: login, get_courses, get_lectures, process_lecture |
 | `src/auto_watch/plugin.py` | `discover_plugins()`, `LMSPlugin` | entry_points 기반 플러그인 인프라 |
 | `src/auto_watch/config.py` | `SchoolConfig`, `SCHOOL_CONFIGS` | 학교별 설정 + 환경변수 |
 | `src/auto_watch/browser.py` | `setup_browser()` | Playwright 브라우저 설정 |
-| `src/auto_watch/transcription.py` | `download_and_transcribe()` | 영상 다운로드 + 전사(옵션) |
+| `src/auto_watch/transcription.py` | `download_and_transcribe()`, `transcribe_local_file()` | 영상 다운로드 + 전사(옵션), 로컬 MP4 전사 |
 
 > `courses.py`, `player.py`는 Provider 구조 전환 시 삭제됨 → 각 Provider 클래스 메서드로 통합.
