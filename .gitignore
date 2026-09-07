@@ -204,3 +204,8 @@ logs/
 # Auto-watch output (영상 + 스크립트)
 output/
 
+# Claude
+.claude/
+
+# oh-my-claudecode
+.omc/
