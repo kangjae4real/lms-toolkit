@@ -34,5 +34,18 @@ def test_mlx_does_not_condition_on_previous_text(tmp_path, monkeypatch):
     monkeypatch.setattr(mlx_whisper, "transcribe", fake)
     t = WhisperTranscriber.__new__(WhisperTranscriber)
     t._use_mlx = True
+    t._mlx_path = "unused"
     t.transcribe("a.mp4", str(tmp_path / "a.txt"))
     assert seen["condition_on_previous_text"] is False
+
+
+def test_mlx_progress_logs_every_minute_of_audio(caplog):
+    from src.audio_pipeline.transcriber import MLX_FRAMES_PER_SEC, _MlxProgress
+
+    caplog.set_level("INFO")
+    with _MlxProgress(total=150 * MLX_FRAMES_PER_SEC, unit="frames", disable=True) as bar:
+        for _ in range(5):
+            bar.update(30 * MLX_FRAMES_PER_SEC)
+
+    progress = [r.getMessage() for r in caplog.records if "전사" in r.getMessage()]
+    assert progress == ["스크립트: 전사 1:00/2:30 (40%)", "스크립트: 전사 2:00/2:30 (80%)"]
