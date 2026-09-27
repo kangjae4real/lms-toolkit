@@ -6,7 +6,10 @@ import contextlib
 import getpass
 import logging
 import sys
+import time
+from collections.abc import Mapping, Sequence
 from datetime import datetime
+from typing import Any
 
 import truststore
 from playwright.async_api import Page, async_playwright
@@ -19,7 +22,8 @@ from .exceptions import LMSError, LoginError
 from .log import setup_logging
 from .plugin import discover_plugins
 from .provider import LMSProvider, get_provider
-from .types import Course, Lecture, ProcessResult
+from .transcription import transcript_exists
+from .types import Course, Lecture, ProcessResult, TranscriptResult
 from .util import format_duration
 
 logger = logging.getLogger(__name__)
@@ -33,6 +37,39 @@ async def _process_safely(
     except Exception:
         logger.exception("강의 처리 실패 — 다음 강의로 넘어감: %s", lecture.get("title"))
         return None
+
+
+def _key(lecture: Mapping[str, Any]) -> tuple[str, str]:
+    return (lecture.get("courseName", "unknown"), lecture["title"])
+
+
+def _collect_failures(
+    lectures: Sequence[Mapping[str, Any]],
+    results: list[TranscriptResult],
+    crashed: set[tuple[str, str]],
+) -> list[tuple[str, str]]:
+    by_key = {(r["course"], r["title"]): r for r in results}
+    failures = []
+    for lec in lectures:
+        key = _key(lec)
+        r = by_key.get(key)
+        if key in crashed:
+            failures.append((lec["title"], "강의 처리 중 오류"))
+        elif r is None:
+            failures.append((lec["title"], "영상 URL 못 찾음"))
+        elif not r["mp4"] and not r["txt"]:
+            failures.append((lec["title"], "다운로드 실패"))
+        elif not r["txt"]:
+            failures.append((lec["title"], "전사 실패"))
+    return failures
+
+
+def _print_failures(label: str, failures: list[tuple[str, str]]) -> None:
+    if not failures:
+        return
+    print(f"  {label}: {len(failures)}개 (로그 확인)")
+    for title, reason in failures:
+        print(f"    - {title}: {reason}")
 
 
 async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvider) -> str | None:
@@ -62,31 +99,37 @@ async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvid
     sel_total = sum(lec["durationSec"] for lec in selected)
     logger.info("%d개 선택, 총 %s", len(selected), format_duration(sel_total))
 
+    started = time.monotonic()
     watch_completed = 0
     download_only = 0
-    transcribed = 0
-    watch_failed = 0
+    watch_failed: list[str] = []
+    crashed: set[tuple[str, str]] = set()
 
     for i, lecture in enumerate(selected, 1):
         print(f"\n[{i}/{len(selected)}]", end=" ")
         result = await _process_safely(provider, page, lecture)
         if result is None:
-            watch_failed += 1
+            watch_failed.append(lecture["title"])
+            crashed.add(_key(lecture))
         elif result.get("download_only"):
             download_only += 1
         elif result["attended"]:
             watch_completed += 1
         else:
-            watch_failed += 1
+            watch_failed.append(lecture["title"])
         await asyncio.sleep(3)
 
     # 백그라운드 다운로드/전사 완료 대기
+    print()
+    logger.info("다운로드/전사 완료 대기 중...")
     transcript_results = await provider.drain_tasks()
-    transcribed = sum(1 for r in transcript_results if r.get("txt"))
-    download_failed = len(selected) - sum(1 for r in transcript_results if r.get("mp4"))
+    transcribed = sum(1 for r in transcript_results if r["txt"] and not r["skipped"])
+    # 수강 단계에서 이미 실패로 센 강의를 다운로드 실패로 한 번 더 세지 않는다
+    remaining = [lec for lec in selected if _key(lec) not in crashed]
+    failures = _collect_failures(remaining, transcript_results, set())
 
     print(f"\n{'═' * 40}")
-    print("  완료!")
+    print(f"  완료! (총 {format_duration(time.monotonic() - started)})")
     if watch_completed:
         print(f"  수강 처리: {watch_completed}개")
     if download_only:
@@ -94,9 +137,10 @@ async def _run_watch_mode(page: Page, courses: list[Course], provider: LMSProvid
     if transcribed:
         print(f"  스크립트: {transcribed}개 추출 → output/")
     if watch_failed:
-        print(f"  수강 실패: {watch_failed}개")
-    if download_failed:
-        print(f"  다운로드 실패: {download_failed}개 (로그 확인)")
+        print(f"  수강 실패: {len(watch_failed)}개")
+        for title in watch_failed:
+            print(f"    - {title}")
+    _print_failures("다운로드/전사 실패", failures)
     print(f"{'═' * 40}")
 
 
@@ -131,27 +175,37 @@ async def _run_download_mode(
         sel_total = sum(lec["durationSec"] for lec in selected)
         logger.info("%d개 선택, 총 %s", len(selected), format_duration(sel_total))
 
-        for i, lecture in enumerate(selected, 1):
-            print(f"\n[{i}/{len(selected)}]", end=" ")
+        started = time.monotonic()
+        pending = [lec for lec in selected if not transcript_exists(*_key(lec))]
+        skipped = len(selected) - len(pending)
+        if skipped:
+            logger.info("스크립트가 이미 있는 %d개는 건너뜀", skipped)
+
+        crashed: set[tuple[str, str]] = set()
+        for i, lecture in enumerate(pending, 1):
+            print(f"\n[{i}/{len(pending)}]", end=" ")
             lecture["isCompleted"] = True
-            await _process_safely(provider, page, lecture)
+            if await _process_safely(provider, page, lecture) is None:
+                crashed.add(_key(lecture))
             await asyncio.sleep(3)
 
         # 백그라운드 다운로드/전사 완료 대기
         print()
         logger.info("다운로드/전사 완료 대기 중...")
         transcript_results = await provider.drain_tasks()
-        transcribed = sum(1 for r in transcript_results if r.get("txt"))
-        downloaded = sum(1 for r in transcript_results if r.get("mp4"))
-        failed = len(selected) - downloaded
+        fresh = [r for r in transcript_results if not r["skipped"]]
+        skipped += len(transcript_results) - len(fresh)
+        transcribed = sum(1 for r in fresh if r["txt"])
+        downloaded = sum(1 for r in fresh if r["mp4"])
 
         print(f"\n{'═' * 40}")
-        print("  완료!")
+        print(f"  완료! (총 {format_duration(time.monotonic() - started)})")
         print(f"  다운로드: {downloaded}개")
         if transcribed:
             print(f"  스크립트: {transcribed}개 추출 → output/")
-        if failed:
-            print(f"  실패: {failed}개 (로그 확인)")
+        if skipped:
+            print(f"  건너뜀: {skipped}개 (스크립트 이미 있음)")
+        _print_failures("실패", _collect_failures(pending, transcript_results, crashed))
         print(f"{'═' * 40}")
         break
 

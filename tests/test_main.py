@@ -19,7 +19,7 @@ class _FlakyProvider:
 
     async def drain_tasks(self):
         self.drained = True
-        return [{"mp4": "b.mp4", "txt": "b.txt"}]
+        return [{"course": "과목", "title": "b", "mp4": "b.mp4", "txt": "b.txt", "skipped": False}]
 
 
 async def test_one_failing_lecture_does_not_stop_batch(monkeypatch, capsys):
@@ -33,8 +33,9 @@ async def test_one_failing_lecture_does_not_stop_batch(monkeypatch, capsys):
     assert provider.drained
     out = capsys.readouterr().out
     assert "수강 실패: 1개" in out
-    # 셋 중 mp4는 하나만 나왔으니 나머지 둘은 다운로드 실패로 보여야 한다
-    assert "다운로드 실패: 2개" in out
+    # a 는 수강 실패로 이미 셌으니, 영상이 안 나온 c 만 다운로드 실패로 보여야 한다
+    assert "다운로드/전사 실패: 1개" in out
+    assert "- c: 영상 URL 못 찾음" in out
 
 
 async def _no_sleep(_):
