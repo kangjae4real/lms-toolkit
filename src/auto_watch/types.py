@@ -28,5 +28,8 @@ class ProcessResult(TypedDict):
 
 
 class TranscriptResult(TypedDict):
+    course: str
+    title: str
     mp4: str | None
     txt: str | None
+    skipped: bool
