@@ -17,7 +17,7 @@ from playwright.async_api import TimeoutError as PlaywrightTimeoutError
 
 from .browser import setup_browser
 from .cli import select_courses, select_lectures, select_mode, select_school
-from .config import SCHOOL_CONFIGS, update_credentials
+from .config import HEADLESS, SCHOOL_CONFIGS, update_credentials
 from .exceptions import LMSError, LoginError
 from .log import setup_logging
 from .plugin import discover_plugins
@@ -274,7 +274,7 @@ async def main() -> None:
     print("=" * 60)
 
     async with async_playwright() as p:
-        page, browser, _context = await setup_browser(p)
+        page, browser, _context = await setup_browser(p, headless=HEADLESS)
 
         try:
             # 로그인 재시도 루프 (최대 3회)
@@ -333,6 +333,7 @@ async def main() -> None:
             logger.error("%s", e)
             sys.exit(1)
         finally:
-            with contextlib.suppress(EOFError):
-                input("\n 엔터를 누르면 브라우저를 닫습니다...")
+            if not HEADLESS:  # 창이 없으면 확인할 화면도 없다
+                with contextlib.suppress(EOFError):
+                    input("\n 엔터를 누르면 브라우저를 닫습니다...")
             await browser.close()

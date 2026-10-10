@@ -64,6 +64,9 @@ OUTPUT_DIR = PROJECT_DIR / "output"
 VAULT_PATH = os.getenv("VAULT_PATH", "")
 
 # 브라우저
+# 시스템 Chrome 132+의 headless는 new headless(완전한 브라우저)라 재생·가시성이 headed와 같다.
+# 출석이 인정되지 않으면 false로 되돌릴 것
+HEADLESS = os.getenv("HEADLESS", "").strip().lower() in ("1", "true", "yes", "on")
 CHROME_PATH = os.getenv(
     "CHROME_PATH",
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
