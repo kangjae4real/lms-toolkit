@@ -210,3 +210,6 @@ output/
 
 # Playwright MCP 콘솔 로그
 .playwright-mcp/
+
+# oh-my-claudecode
+.omc/
