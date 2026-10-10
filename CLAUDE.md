@@ -35,7 +35,7 @@ KCU_PASSWORD=(비밀번호)
 
 # 레거시 호환: USERID/PASSWORD도 SSU 폴백으로 지원
 CHROME_PATH=(선택, Chrome 경로 오버라이드)
-HEADLESS=(선택, true/1/yes/on이면 창 없이 실행. 기본 false)
+HEADLESS=(선택, true/1/yes/on이면 창 없이 실행. 기본 false, install.sh에서 y/n 입력)
 ```
 
 ## 비직관적 사실

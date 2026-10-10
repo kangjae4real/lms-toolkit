@@ -26,7 +26,7 @@
 bash install.sh
 ```
 
-Homebrew, Python, ffmpeg, Playwright 등 필요한 모든 것을 자동 설치하고, 숭실대 학번/비밀번호를 입력받아 `.env` 파일을 생성합니다. 숭실사이버대(KCU) 계정도 선택적으로 함께 등록할 수 있습니다.
+Homebrew, Python, ffmpeg, Playwright 등 필요한 모든 것을 자동 설치하고, 숭실대 학번/비밀번호를 입력받아 `.env` 파일을 생성합니다. 숭실사이버대(KCU) 계정도 선택적으로 함께 등록할 수 있고, 브라우저 창 없이 실행할지(headless)도 고를 수 있습니다.
 
 ### 실행
 
