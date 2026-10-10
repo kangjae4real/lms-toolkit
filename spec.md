@@ -135,7 +135,7 @@ n by n 행렬이에요 행과 열을 바꿔 놓은 겁니다 ...
 - **SSU 1x 배속 필수**: SSU LMS 서버가 `invalidPbrate`로 배속 감지. 초과 시 부정행위 처리
 - **KCU 2x 배속 기본**: KCU는 배속 제한 없음. 2배속 자동 설정
 - **동시 수강 불가**: 창 여러 개로 동시 재생하면 안 됨. 순차 재생만
-- **headed 브라우저**: 헤드리스면 LTI 플레이어가 완료 이벤트 안 보낼 수 있음
+- **headed 브라우저 기본**: 헤드리스면 LTI 플레이어가 완료 이벤트 안 보낼 수 있음. `.env`의 `HEADLESS=true`로 headless 선택 가능 (출석 인정 안 되면 false로)
 - **SSO 로그인**: `page.type` + JS `btn_click` 방식 (Playwright `fill`이 안 먹힘)
 
 ## 범위 밖 (Out of Scope)
@@ -148,7 +148,7 @@ n by n 행렬이에요 행과 열을 바꿔 놓은 겁니다 ...
 ## 기술 스택
 
 - **언어**: Python 3.11+
-- **브라우저 자동화**: Playwright (headed, 시스템 Chrome — `CHROME_PATH`)
+- **브라우저 자동화**: Playwright (기본 headed, `HEADLESS`로 headless, 시스템 Chrome — `CHROME_PATH`)
 - **음성→텍스트**: mlx-whisper (Apple GPU) / faster-whisper (CTranslate2, CPU 폴백), 로컬
 - **자동화 트리거**: OpenClaw (cron + 텔레그램)
 

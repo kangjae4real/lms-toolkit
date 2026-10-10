@@ -35,12 +35,15 @@ KCU_PASSWORD=(비밀번호)
 
 # 레거시 호환: USERID/PASSWORD도 SSU 폴백으로 지원
 CHROME_PATH=(선택, Chrome 경로 오버라이드)
+HEADLESS=(선택, true/1/yes/on이면 창 없이 실행. 기본 false)
 ```
 
 ## 비직관적 사실
 
 - **Python >=3.11** (uv + pyproject.toml 기반)
-- **headed 브라우저 필수**: 헤드리스면 LTI 플레이어 완료 이벤트 미발생
+- **기본 headed, `HEADLESS=true`로 headless**: 과거 구 headless에선 LTI 플레이어 완료 이벤트 미발생.
+  시스템 Chrome 132+는 new headless라 visibility/focus/재생이 headed와 같고 UA·client hints에
+  `HeadlessChrome`도 안 드러남(Chrome 154 실측). 실제 출석 인정은 미검증 — 안 되면 false로
 - **Chrome 경로**: 기본 `/Applications/Google Chrome.app/`, `CHROME_PATH` 환경변수로 오버라이드 가능
 - **Whisper 모델 캐시**: `~/.cache/huggingface/hub/` (~1.5GB)
 - **전사 엔진**: Apple Silicon은 mlx-whisper(GPU), 그 외는 faster-whisper(CPU) 폴백.

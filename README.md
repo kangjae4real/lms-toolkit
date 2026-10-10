@@ -59,6 +59,9 @@ SSU_PASSWORD=비밀번호
 # 숭실사이버대
 KCU_USERID=학번
 KCU_PASSWORD=비밀번호
+
+# 브라우저 창 없이 실행 (선택, 기본 false)
+HEADLESS=true
 ```
 
 실행:
@@ -178,6 +181,12 @@ Playwright 번들 Chromium이 아니라 설치된 Google Chrome을 씁니다. �
 ```
 CHROME_PATH=/path/to/Google Chrome.app/Contents/MacOS/Google Chrome
 ```
+
+### 브라우저 창 없이 실행 (headless)
+
+기본은 Chrome 창이 뜨는 headed 모드입니다. `.env`에 `HEADLESS=true`(또는 `1`, `yes`, `on`)를 넣으면 창 없이 백그라운드에서 수강합니다. 이때는 종료 시 "엔터를 누르면 브라우저를 닫습니다" 확인도 생략됩니다.
+
+헤드리스에서 출석이 인정되지 않는 강의가 있으면 `HEADLESS=false`로 되돌리세요.
 
 ### Whisper 모델
 
