@@ -207,9 +207,21 @@ if [ "$CREATE_ENV" = true ]; then
         echo -e "  ${YELLOW}[참고]${NC} 나중에 .env 파일에 KCU_USERID, KCU_PASSWORD를 추가하면 됩니다."
     fi
 
+    # --- 브라우저 창 (선택) ---
+    echo ""
+    read -p "  브라우저 창 없이 백그라운드로 실행할까요? (y/n): " use_headless
+    use_headless="${use_headless//[^a-zA-Z]/}"
+    if [[ "$use_headless" =~ ^[yY] ]]; then
+        headless=true
+        echo -e "  ${YELLOW}[참고]${NC} 출석이 인정되지 않으면 .env에서 HEADLESS=false로 바꾸세요."
+    else
+        headless=false
+    fi
+
     cat > .env << EOF
 SSU_USERID=${ssu_userid}
 SSU_PASSWORD=${ssu_password}${KCU_ENV}
+HEADLESS=${headless}
 EOF
 
     ok ".env 파일 생성 완료"
